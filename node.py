@@ -1283,7 +1283,6 @@ from docx.oxml.ns import qn
 # 6.1 AI RECOMMENDATION OUTPUT SCHEMAS
 # ============================================================
 
-
 class FeatureRecommendation(BaseModel):
 
     product_feature: str
@@ -1328,7 +1327,6 @@ ai_recommendations_parser = PydanticOutputParser(
 # 6.2 HELPER FUNCTIONS
 # ============================================================
 
-
 def _get_value(record, key, default=None):
 
     """
@@ -1345,10 +1343,10 @@ def _get_value(record, key, default=None):
 def _normalize_feature(feature):
 
     """
-    Normalize product feature names for aggregation.
+    Normalize product feature descriptions.
     """
 
-    feature = str(feature).strip().lower()
+    feature = str(feature or "").strip().lower()
 
     feature = re.sub(r"\s+", " ", feature)
 
@@ -1359,105 +1357,21 @@ def _normalize_feature(feature):
 # 6.3 PATENT PORTFOLIO ANALYTICS
 # ============================================================
 
-import re
-from collections import defaultdict
-
-
 def canonicalize_product_feature(feature):
 
     """
-    Consolidate semantically similar product features
-    into standardized technical categories.
+    Technology-independent feature normalization.
 
-    Original feature descriptions are retained separately.
+    Does not rely on predefined industry-specific categories.
     """
 
-    text = str(feature).strip().lower()
+    text = str(feature or "").strip().lower()
 
     text = re.sub(r"[^a-z0-9\s-]", " ", text)
+
     text = re.sub(r"\s+", " ", text)
 
-    feature_categories = [
-
-        (
-            "Battery Management",
-            r"\bbattery management\b|\bbattery performance\b"
-        ),
-
-        (
-            "Battery Charging",
-            r"\bbattery charg\w*\b|\bcharging systems?\b"
-        ),
-
-        (
-            "Thermal Management",
-            r"\bthermal management\b|\bthermal regulat\w*\b|\bheat dissipation\b"
-        ),
-
-        (
-            "Protection Mechanisms",
-            r"\bprotection mechanisms?\b|\bovercurrent protection\b|"
-            r"\bovervoltage protection\b|\bshort circuit protection\b"
-        ),
-
-        (
-            "Sensing and Monitoring",
-            r"\bsensing mechanisms?\b|\bsensor systems?\b|"
-            r"\bmonitoring systems?\b|\bmeasurement circuitry\b"
-        ),
-
-        (
-            "Power Regulation",
-            r"\bvoltage regulat\w*\b|\bcurrent regulat\w*\b|"
-            r"\bpower regulat\w*\b"
-        ),
-
-        (
-            "Motor Control",
-            r"\bmotor controllers?\b|\bmotor control\b|"
-            r"\bmotor drive circuitry\b|\bmotor speed\b|\bmotor torque\b"
-        ),
-
-        (
-            "Semiconductor Switching",
-            r"\bsemiconductor switching\b|\bswitching devices?\b|"
-            r"\bgan based\b|\bgan-based\b|\bgallium nitride\b|"
-            r"\bpower mosfet\b"
-        ),
-
-        (
-            "Inverter Systems",
-            r"\binverters?\b|\binverter circuitry\b"
-        ),
-
-        (
-            "Power Conversion",
-            r"\bpower conversion\b|\bpower converters?\b|"
-            r"\bpower conversion circuits?\b"
-        ),
-
-        (
-            "Power Supply Systems",
-            r"\bpower supplies\b|\bpower supply\b"
-        ),
-
-        (
-            "Control Circuitry",
-            r"\bcontrol circuitry\b|\bcontrol circuits?\b|"
-            r"\belectronic control systems?\b"
-        )
-    ]
-
-    for category, pattern in feature_categories:
-
-        if re.search(pattern, text):
-
-            return category
-
-    # Fallback: preserve unrecognized technical features.
-    normalized = _normalize_feature(feature)
-
-    return str(normalized).strip() if normalized else ""
+    return text.strip()
 
 
 def calculate_patent_analytics(patent_results):
@@ -1466,11 +1380,9 @@ def calculate_patent_analytics(patent_results):
     Calculate patent-level and consolidated product-feature
     analytics.
 
-    Similar product features are grouped into standardized
-    technical categories.
+    Supports different technologies and industries.
 
-    Original feature descriptions and patent-level details
-    are retained for detailed FTO review.
+    Original feature descriptions are retained separately.
 
     Duplicate publication numbers are counted only once
     per consolidated feature and relevance rating.
@@ -1479,20 +1391,31 @@ def calculate_patent_analytics(patent_results):
     ratings = ["H", "M+", "L", "NR"]
 
     rating_counts = {
+
         rating: 0 for rating in ratings
+
     }
 
     unique_patents = {}
 
     feature_data = defaultdict(
+
         lambda: {
+
             "H": set(),
+
             "M+": set(),
+
             "L": set(),
+
             "NR": set(),
+
             "patent_details": {},
+
             "original_features": set()
+
         }
+
     )
 
     # --------------------------------------------------------
@@ -1502,57 +1425,106 @@ def calculate_patent_analytics(patent_results):
     for record in patent_results:
 
         publication_number = str(
+
             _get_value(
+
                 record,
+
                 "publication_number",
+
                 ""
-            )
+
+            ) or ""
+
         ).strip()
 
         if not publication_number:
+
             continue
 
         relevance = str(
+
             _get_value(
+
                 record,
+
                 "relevance",
+
                 "NR"
-            )
+
+            ) or "NR"
+
         ).strip().upper()
 
         if relevance not in ratings:
+
             continue
 
-        unique_patents[publication_number] = {
+        patent_data = {
 
             "publication_number": publication_number,
 
             "title": _get_value(
+
                 record,
+
                 "title",
+
                 ""
+
             ),
 
             "relevance": relevance,
 
             "confidence": _get_value(
+
                 record,
+
                 "confidence",
+
                 0
+
             ),
 
             "rationale": _get_value(
+
                 record,
+
                 "rationale",
+
                 ""
+
             ),
 
             "reasoning": _get_value(
+
                 record,
+
                 "reasoning",
+
                 ""
+
             )
+
         }
+
+        if publication_number not in unique_patents:
+
+            unique_patents[publication_number] = patent_data
+
+        else:
+
+            existing = unique_patents[publication_number]
+
+            if (
+
+                not existing.get("rationale")
+
+                and patent_data.get("rationale")
+
+            ):
+
+                unique_patents[publication_number] = patent_data
 
     # --------------------------------------------------------
     # STEP 2: COUNT UNIQUE PATENTS BY RATING
@@ -1571,119 +1543,175 @@ def calculate_patent_analytics(patent_results):
     for record in patent_results:
 
         publication_number = str(
+
             _get_value(
+
                 record,
+
                 "publication_number",
+
                 ""
-            )
+
+            ) or ""
+
         ).strip()
 
         if publication_number not in unique_patents:
+
             continue
 
         rating = unique_patents[
+
             publication_number
+
         ]["relevance"]
 
         comparisons = _get_value(
+
             record,
+
             "comparison",
+
             []
+
         ) or []
 
         for comparison in comparisons:
 
             product_feature = _get_value(
+
                 comparison,
+
                 "product_feature",
+
                 ""
+
             )
 
             match_type = str(
+
                 _get_value(
+
                     comparison,
+
                     "match_type",
+
                     ""
-                )
+
+                ) or ""
+
             ).strip()
 
             if not product_feature:
+
                 continue
 
-            # No Match is not evidence of correspondence.
+            # ------------------------------------------------
+            # NO MATCH IS NOT EVIDENCE OF CORRESPONDENCE
+            # ------------------------------------------------
+
             if match_type.lower() == "no match":
+
                 continue
 
-            # -----------------------------------------------
-            # SEMANTIC FEATURE CONSOLIDATION
-            # -----------------------------------------------
+            # ------------------------------------------------
+            # FEATURE NORMALIZATION
+            # ------------------------------------------------
 
             normalized = canonicalize_product_feature(
+
                 product_feature
+
             )
 
             if not normalized:
+
                 continue
 
-            # -----------------------------------------------
+            # ------------------------------------------------
             # COUNT UNIQUE PUBLICATIONS
-            # -----------------------------------------------
+            # ------------------------------------------------
 
             feature_data[normalized][rating].add(
+
                 publication_number
+
             )
 
-            # -----------------------------------------------
+            # ------------------------------------------------
             # RETAIN ORIGINAL FEATURE DESCRIPTIONS
-            # -----------------------------------------------
+            # ------------------------------------------------
 
             feature_data[normalized][
+
                 "original_features"
+
             ].add(
+
                 str(product_feature).strip()
+
             )
 
-            # -----------------------------------------------
+            # ------------------------------------------------
             # RETAIN PATENT-LEVEL DETAILS
-            # -----------------------------------------------
+            # ------------------------------------------------
 
             patent_details = feature_data[normalized][
+
                 "patent_details"
+
             ]
 
             if publication_number not in patent_details:
 
                 patent_details[publication_number] = {
+
                     "product_features": []
+
                 }
 
             detail = {
 
                 "product_feature": str(
+
                     product_feature
+
                 ),
 
                 "match_type": match_type,
 
                 "patent_feature": _get_value(
+
                     comparison,
+
                     "patent_feature",
+
                     ""
+
                 ),
 
                 "reasoning": _get_value(
+
                     comparison,
+
                     "reasoning",
+
                     ""
+
                 )
+
             }
 
             if detail not in patent_details[
+
                 publication_number
+
             ]["product_features"]:
 
                 patent_details[
+
                     publication_number
+
                 ]["product_features"].append(detail)
 
     # --------------------------------------------------------
@@ -1703,16 +1731,25 @@ def calculate_patent_analytics(patent_results):
         nr_count = len(data["NR"])
 
         high_relevance_count = (
+
             h_count + mplus_count
+
         )
 
         total_feature_patents = len(
+
             set().union(
+
                 data["H"],
+
                 data["M+"],
+
                 data["L"],
+
                 data["NR"]
+
             )
+
         )
 
         portfolio_concentration = (
@@ -1731,28 +1768,28 @@ def calculate_patent_analytics(patent_results):
 
         )
 
-        # -----------------------------------------------
+        # ------------------------------------------------
         # SHORT GRAPH LABEL
-        # -----------------------------------------------
+        # ------------------------------------------------
 
         display_feature = normalized
 
         if len(display_feature) > 45:
 
             display_feature = (
+
                 display_feature[:42].rsplit(" ", 1)[0]
+
                 + "..."
+
             )
 
         feature_analytics.append({
 
-            # Standardized feature category
             "product_feature": normalized,
 
-            # Short graph label
             "display_feature": display_feature,
 
-            # Number of unique patents by rating
             "H": h_count,
 
             "M+": mplus_count,
@@ -1761,32 +1798,38 @@ def calculate_patent_analytics(patent_results):
 
             "NR": nr_count,
 
-            # Unique publications associated with feature
             "total_patents": total_feature_patents,
 
             "high_relevance_count": high_relevance_count,
 
             "portfolio_concentration": round(
+
                 portfolio_concentration,
+
                 2
+
             ),
 
             "h_share": round(
+
                 h_share,
+
                 2
+
             ),
 
-            # Supporting publications
             "supporting_publication_numbers": sorted(
+
                 data["H"] | data["M+"]
+
             ),
 
-            # All original feature descriptions
             "original_feature_variants": sorted(
+
                 data["original_features"]
+
             ),
 
-            # Detailed patent-level mapping
             "patent_details": data["patent_details"]
 
         })
@@ -1866,53 +1909,57 @@ def calculate_patent_analytics(patent_results):
         "high_priority_patents": high_priority_patents,
 
         "high_priority_percentage": round(
+
             high_priority_percentage,
+
             2
+
         ),
 
         "feature_analytics": feature_analytics,
 
         "patent_records": list(
+
             unique_patents.values()
+
         )
 
     }
+
 
 # ============================================================
 # 6.4 GENERATE AI GENERATED RECOMMENDATIONS USING LLM
 # ============================================================
 
-
 def generate_ai_recommendations(
+
     patent_results,
+
     product_description
+
 ):
 
     """
-    Generate consolidated AI recommendations.
+    Generate generalized portfolio-level AI recommendations.
 
-    The LLM receives:
-
-        1. Product description
-        2. Overall patent distribution
-        3. Feature-wise patent concentration
-        4. Individual patent analysis results
-
-    Returns:
-
-        analytics
-        recommendations
+    The analysis is technology-independent and suitable
+    for different products and industries.
     """
 
     analytics = calculate_patent_analytics(
+
         patent_results
+
     )
 
     if analytics["total_patents"] == 0:
 
         raise ValueError(
+
             "No valid completed patent analysis results "
+
             "were provided."
+
         )
 
     # --------------------------------------------------------
@@ -1938,6 +1985,7 @@ def generate_ai_recommendations(
             "total_associated_patents": feature["total_patents"],
 
             "supporting_publication_numbers":
+
                 feature["supporting_publication_numbers"]
 
         })
@@ -1980,8 +2028,12 @@ a technical FTO screening assessment.
 Your task is to analyse the COMPLETE patent dataset
 against the supplied product description.
 
-This is a portfolio-level assessment and not an
-individual patent recommendation exercise.
+Your analysis must be GENERALIZED and TECHNOLOGY-INDEPENDENT.
+
+The product may belong to any technical domain,
+engineering discipline, application area, or industry.
+
+Do not assume any specific technology or industry.
 
 ============================================================
 PRODUCT DESCRIPTION
@@ -1998,21 +2050,17 @@ Total unique patents:
 
 {analytics["total_patents"]}
 
-
 Rating distribution:
 
 {json.dumps(analytics["rating_counts"], indent=2)}
-
 
 Rating percentages:
 
 {json.dumps(analytics["rating_percentages"], indent=2)}
 
-
 Total H + M+ patents:
 
 {analytics["high_priority_patents"]}
-
 
 H + M+ portfolio percentage:
 
@@ -2037,48 +2085,81 @@ INDIVIDUAL PATENT RESULTS
 ANALYSIS INSTRUCTIONS
 ============================================================
 
-1. Identify product features associated with the
-   largest concentration of H patents.
+1. Analyse the complete patent portfolio.
 
-2. Identify features with significant M+ concentration.
+2. Identify significant patterns among H-rated patents.
 
-3. Identify features attracting both H and M+ patents.
+3. Identify significant M+-rated patent concentration.
 
-4. Identify features predominantly associated with
-   L and NR patents.
+4. Identify patterns among L and NR patents.
 
-5. Identify recurring technical combinations appearing
-   across multiple H or M+ patents.
+5. Examine recurring technical combinations,
+   functional relationships, structural arrangements,
+   processes, and claim limitations.
 
-6. Explain which product features deserve the highest
-   priority for further patent review.
+6. Consider actual claim correspondence, confidence,
+   rationale, and reasoning.
 
-7. Recommend areas where alternative technical
-   implementations could be investigated.
+7. Identify areas requiring detailed patent claim review.
 
-8. Identify product features requiring additional
-   technical documentation to resolve uncertainty.
+8. Distinguish patent concentration from infringement risk.
 
-9. Distinguish patent concentration from infringement risk.
-   A higher patent count does not establish infringement.
+9. Identify technical investigation directions where
+   supported by the actual patent findings.
 
 10. Do not invent technical alternatives or claim limitations.
-    Suggested design alternatives must be framed as areas
-    for investigation, not confirmed workarounds.
 
 11. Use actual publication numbers when identifying
     supporting patents.
 
 12. Never count duplicate publication numbers twice.
 
-13. Feature-level patent counts may overlap because one
-    patent may correspond to multiple product features.
+13. Feature-level patent counts may overlap because
+    one patent may correspond to multiple features.
 
-14. Do not infer that L or NR patents have no technical
+14. Do not assume L or NR patents have no technical
     relationship whatsoever.
 
-15. Consider actual claim correspondence and confidence,
-    not patent counts alone.
+============================================================
+IMPORTANT: AVOID REPETITIVE PRODUCT FEATURES
+============================================================
+
+The report already contains a separate section titled:
+
+"Product Feature-Wise Patent Concentration"
+
+That section presents individual product features,
+their patent counts, and relevance distribution.
+
+Therefore:
+
+1. Do not reproduce individual product feature names
+   as headings in AI recommendations.
+
+2. Do not repeat the feature concentration table.
+
+3. Do not create another list of product features
+   with slightly modified wording.
+
+4. Focus on broader portfolio-level review areas,
+   recurring claim limitations, technical combinations,
+   overlapping patent concerns, and strategic findings.
+
+5. Each recommendation must add analytical value
+   beyond the feature-wise concentration section.
+
+6. Group related findings only when the supplied
+   patent evidence supports that relationship.
+
+7. Do not manufacture relationships between unrelated
+   technologies or patent findings.
+
+8. If no meaningful portfolio-level review area can
+   be identified, return an empty list.
+
+The existing schema field "product_feature" must be used
+for a concise portfolio review area or strategic concern.
+It must NOT simply repeat an individual product feature.
 
 ============================================================
 RECOMMENDATION PRIORITY
@@ -2086,27 +2167,99 @@ RECOMMENDATION PRIORITY
 
 Highest:
 
-Features with the strongest H patent concentration
-and meaningful claim correspondence.
+Strong H-rated evidence with meaningful claim correspondence
+and substantial patent assessment concerns.
 
 High:
 
-Features with substantial H + M+ concentration.
+Meaningful H and M+ evidence, or substantial claim-related
+concerns requiring further examination.
 
 Moderate:
 
-Features with limited H/M+ concentration or material
-claim-related uncertainty.
+Limited H/M+ evidence, or material technical and
+claim-related uncertainty requiring further examination.
 
 Lower:
 
-Features predominantly associated with L or NR patents.
+Predominantly L or NR findings with limited evidence
+of meaningful claim correspondence.
+
+Priority must not be determined using patent counts alone.
+
+============================================================
+OUTPUT REQUIREMENTS
+============================================================
+
+1. EXECUTIVE SUMMARY
+
+Provide approximately 3-5 concise sentences.
+
+Summarize the overall portfolio landscape,
+important findings, and investigation priorities.
+
+2. HIGHEST-PRIORITY AREAS
+
+Identify broader portfolio review areas requiring
+significant attention.
+
+Each entry must contain:
+
+- product_feature
+- priority
+- analysis
+- recommendation
+- supporting_publication_numbers
+
+Do not repeat individual product feature names.
+
+3. LOWER-PRIORITY AREAS
+
+Identify comparatively lower-priority portfolio
+review areas.
+
+Explain the evidence supporting the lower priority.
+
+Do not assume L or NR means no technical relationship.
+
+4. ACTIONABLE RECOMMENDATIONS
+
+Provide practical recommendations for:
+
+- Detailed claim review.
+- Technical verification.
+- Patent-family investigation.
+- Implementation analysis.
+- Portfolio monitoring.
+- Additional documentation.
+
+Only include recommendations relevant to the supplied data.
+
+5. POTENTIAL DESIGN ALTERNATIVES
+
+Identify technical directions worth investigating
+where actual patent claim limitations provide a basis.
+
+Do not invent unsupported alternatives.
+
+Do not describe any alternative as a confirmed workaround.
+
+6. ADDITIONAL INVESTIGATION AREAS
+
+Identify missing technical information, implementation
+details, claim limitations, patent status, or other
+relevant matters requiring further examination.
+
+7. CONCLUSION
+
+Provide a concise overall portfolio assessment
+and recommended next steps.
 
 ============================================================
 IMPORTANT LIMITATIONS
 ============================================================
 
-This report is a technical portfolio screening assessment.
+This is a technical portfolio screening assessment.
 
 Do not state that:
 
@@ -2115,31 +2268,22 @@ Do not state that:
 - A design alternative guarantees avoidance.
 - The supplied portfolio represents all existing patents.
 
+A complete FTO assessment requires additional claim
+interpretation, jurisdiction-specific analysis,
+patent status verification, and legal review.
+
 ============================================================
-OUTPUT REQUIREMENTS
+OUTPUT FORMAT
 ============================================================
-
-Generate:
-
-1. Executive portfolio summary.
-
-   Keep it crisp and concise, approximately 3-5 sentences.
-
-2. Highest-priority product features.
-
-3. Lower-priority product features.
-
-4. Actionable portfolio recommendations.
-
-5. Potential design alternatives for investigation.
-
-6. Additional investigation areas.
-
-7. Overall portfolio conclusion.
-
-Keep feature-level analysis concise and evidence-based.
 
 Return valid JSON only.
+
+Keep the analysis concise, specific, and evidence-based.
+
+Follow the Pydantic schema exactly.
+
+If insufficient evidence exists for an output category,
+return an empty list rather than inventing content.
 
 {ai_recommendations_parser.get_format_instructions()}
 
@@ -2160,15 +2304,23 @@ Return valid JSON only.
                 content=(
 
                     "You are an experienced patent portfolio "
-                    "analyst. Provide concise, evidence-based "
-                    "technical recommendations."
+
+                    "analyst. Provide generalized, concise, "
+
+                    "technology-independent and evidence-based "
+
+                    "technical recommendations. Avoid repeating "
+
+                    "individual product features."
 
                 )
 
             ),
 
             HumanMessage(
+
                 content=recommendation_prompt
+
             )
 
         ]
@@ -2190,7 +2342,9 @@ Return valid JSON only.
     try:
 
         recommendations = ai_recommendations_parser.parse(
+
             response.content
+
         )
 
     except Exception as e:
@@ -2212,18 +2366,22 @@ Return valid JSON only.
 # 6.5 WORD DOCUMENT FORMATTING HELPERS
 # ============================================================
 
-
 def _set_cell_background(cell, color):
 
     shading = OxmlElement("w:shd")
 
     shading.set(
+
         qn("w:fill"),
+
         color
+
     )
 
     cell._tc.get_or_add_tcPr().append(
+
         shading
+
     )
 
 
@@ -2232,8 +2390,11 @@ def _format_table_header(table):
     for cell in table.rows[0].cells:
 
         _set_cell_background(
+
             cell,
+
             "071426"
+
         )
 
         for paragraph in cell.paragraphs:
@@ -2243,16 +2404,24 @@ def _format_table_header(table):
                 run.font.bold = True
 
                 run.font.color.rgb = RGBColor(
+
                     255,
+
                     255,
+
                     255
+
                 )
 
 
 def _add_dataframe_style_table(
+
     document,
+
     headers,
+
     rows
+
 ):
 
     table = document.add_table(
@@ -2266,13 +2435,17 @@ def _add_dataframe_style_table(
     table.style = "Table Grid"
 
     table.alignment = (
+
         WD_TABLE_ALIGNMENT.CENTER
+
     )
 
     for index, header in enumerate(headers):
 
         table.rows[0].cells[index].text = str(
+
             header
+
         )
 
     _format_table_header(table)
@@ -2284,7 +2457,9 @@ def _add_dataframe_style_table(
         for index, value in enumerate(row):
 
             cells[index].text = str(
+
                 value
+
             )
 
             cells[index].vertical_alignment = (
@@ -2299,7 +2474,6 @@ def _add_dataframe_style_table(
 # ============================================================
 # 6.6 GENERATE PATENT ANALYTICS GRAPHS
 # ============================================================
-
 
 def _create_recommendation_charts(analytics):
 
@@ -2322,7 +2496,9 @@ def _create_recommendation_charts(analytics):
     counts = analytics["rating_counts"]
 
     fig, ax = plt.subplots(
+
         figsize=(7, 3.5)
+
     )
 
     ratings = list(counts.keys())
@@ -2330,25 +2506,37 @@ def _create_recommendation_charts(analytics):
     values = list(counts.values())
 
     bars = ax.bar(
+
         ratings,
+
         values
+
     )
 
     ax.set_title(
+
         "Patent Relevance Distribution"
+
     )
 
     ax.set_xlabel(
+
         "Relevance Rating"
+
     )
 
     ax.set_ylabel(
+
         "Number of Patents"
+
     )
 
     ax.set_ylim(
+
         0,
+
         max(values, default=0) * 1.15 + 1
+
     )
 
     for bar, value in zip(bars, values):
@@ -2397,7 +2585,7 @@ def _create_recommendation_charts(analytics):
 
         names = [
 
-            item["product_feature"]
+            item["display_feature"]
 
             for item in features
 
@@ -2436,17 +2624,25 @@ def _create_recommendation_charts(analytics):
         ]
 
         fig, ax = plt.subplots(
+
             figsize=(9, 5)
+
         )
 
         y = np.arange(
+
             len(names)
+
         )
 
         ax.barh(
+
             y,
+
             h_values,
+
             label="H"
+
         )
 
         ax.barh(
@@ -2461,13 +2657,17 @@ def _create_recommendation_charts(analytics):
 
         )
 
-        left_l = (
+        left_m = (
 
             np.array(h_values)
 
             + np.array(mplus_values)
 
         )
+
+        # H + M+ is the starting position for L.
+
+        left_l = left_m
 
         ax.barh(
 
@@ -2508,11 +2708,15 @@ def _create_recommendation_charts(analytics):
         ax.invert_yaxis()
 
         ax.set_xlabel(
+
             "Number of Associated Patents"
+
         )
 
         ax.set_title(
+
             "Top 10 Product Features - Patent Concentration"
+
         )
 
         ax.legend()
@@ -2541,9 +2745,8 @@ def _create_recommendation_charts(analytics):
 
 
 # ============================================================
-# 6.7 AI GENERATED RECOMMENDATIONS WORD REPORT
+# 6.7 GENERATE PATENT ANALYTICS WORD REPORT
 # ============================================================
-
 
 def generate_ai_recommendations_report(
 
@@ -2564,8 +2767,8 @@ def generate_ai_recommendations_report(
         2. Patent Distribution
         3. Patent Analytics Graphs
         4. Feature-wise Patent Concentration
-        5. Highest-Priority Features
-        6. Lower-Priority Features
+        5. Highest-Priority Portfolio Review Areas
+        6. Lower-Priority Portfolio Review Areas
         7. AI Recommendations
         8. Potential Design Alternatives
         9. Additional Investigation Areas
@@ -2583,6 +2786,7 @@ def generate_ai_recommendations_report(
     if analytics is None or recommendations is None:
 
         analytics, recommendations = (
+
             generate_ai_recommendations(
 
                 patent_results,
@@ -2590,6 +2794,7 @@ def generate_ai_recommendations_report(
                 product_description
 
             )
+
         )
 
     document = Document()
@@ -2621,15 +2826,23 @@ def generate_ai_recommendations_report(
     styles["Title"].font.bold = True
 
     styles["Title"].font.color.rgb = RGBColor(
+
         7,
+
         20,
+
         38
+
     )
 
     styles["Heading 1"].font.color.rgb = RGBColor(
+
         7,
+
         20,
+
         38
+
     )
 
     # --------------------------------------------------------
@@ -2645,7 +2858,9 @@ def generate_ai_recommendations_report(
     )
 
     title.alignment = (
+
         WD_ALIGN_PARAGRAPH.CENTER
+
     )
 
     subtitle = document.add_paragraph(
@@ -2655,7 +2870,9 @@ def generate_ai_recommendations_report(
     )
 
     subtitle.alignment = (
+
         WD_ALIGN_PARAGRAPH.CENTER
+
     )
 
     subtitle.runs[0].bold = True
@@ -2673,12 +2890,15 @@ def generate_ai_recommendations_report(
     )
 
     document.add_paragraph(
+
         product_description
+
     )
 
     document.add_paragraph(
 
         "Technical screening report based on the supplied "
+
         "product description and patent analysis results."
 
     )
@@ -2776,7 +2996,9 @@ def generate_ai_recommendations_report(
     )
 
     charts = _create_recommendation_charts(
+
         analytics
+
     )
 
     document.add_picture(
@@ -2812,8 +3034,11 @@ def generate_ai_recommendations_report(
     document.add_paragraph(
 
         "Feature-level counts represent distinct publication "
+
         "numbers associated with each product feature. "
+
         "A patent may appear under multiple product features. "
+
         "Therefore, feature-level counts may overlap."
 
     )
@@ -2882,7 +3107,7 @@ def generate_ai_recommendations_report(
 
     document.add_heading(
 
-        "5. Highest-Priority Product Features",
+        "5. Highest-Priority Portfolio Review Areas",
 
         level=1
 
@@ -2934,7 +3159,9 @@ def generate_ai_recommendations_report(
 
         document.add_paragraph(
 
-            "No highest-priority features were identified."
+            "No significant highest-priority portfolio review "
+
+            "areas were identified."
 
         )
 
@@ -2944,7 +3171,7 @@ def generate_ai_recommendations_report(
 
     document.add_heading(
 
-        "6. Lower-Priority Product Features",
+        "6. Lower-Priority Portfolio Review Areas",
 
         level=1
 
@@ -2996,7 +3223,9 @@ def generate_ai_recommendations_report(
 
         document.add_paragraph(
 
-            "No lower-priority features were identified."
+            "No specific lower-priority portfolio review "
+
+            "areas were identified."
 
         )
 
@@ -3047,7 +3276,9 @@ def generate_ai_recommendations_report(
     document.add_paragraph(
 
         "The following are areas for technical investigation. "
+
         "They are not confirmed design-arounds or guarantees "
+
         "of avoiding patent claims."
 
     )
@@ -3055,7 +3286,9 @@ def generate_ai_recommendations_report(
     if recommendations.potential_design_alternatives:
 
         for alternative in (
+
             recommendations.potential_design_alternatives
+
         ):
 
             document.add_paragraph(
@@ -3089,7 +3322,9 @@ def generate_ai_recommendations_report(
     if recommendations.additional_investigation_areas:
 
         for investigation in (
+
             recommendations.additional_investigation_areas
+
         ):
 
             document.add_paragraph(
@@ -3141,15 +3376,25 @@ def generate_ai_recommendations_report(
     document.add_paragraph(
 
         "This report consolidates the individual patent "
+
         "relevance assessments produced by RelevanceIQ. "
+
         "Portfolio-level patent counts are based on unique "
+
         "publication numbers. Feature-level counts may overlap "
+
         "because one patent can correspond to multiple product "
+
         "features. H and M+ classifications indicate screening "
+
         "priority and technical correspondence, not confirmed "
+
         "infringement. The analysis is limited to the supplied "
+
         "product description, patent records, claims and "
+
         "portfolio coverage. This report does not establish "
+
         "freedom to operate or constitute a legal opinion."
 
     )
@@ -3167,11 +3412,9 @@ def generate_ai_recommendations_report(
     print(
 
         "AI Generated Recommendations report "
+
         "generated successfully."
 
     )
 
     return output
-
-
-
