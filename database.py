@@ -66,7 +66,7 @@ def save_result(result):
 
         )
 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?, ?, ?, ?)
         """,
         (
 
@@ -75,7 +75,7 @@ def save_result(result):
             result["abstract"],
             result["independent_claims"],
             result["all_claims"],
-            result["relevance_human"],
+    
             result["product_description"],
             result["relevance_framework"],
             result["relevance"],
