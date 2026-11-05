@@ -1359,23 +1359,121 @@ def _normalize_feature(feature):
 # 6.3 PATENT PORTFOLIO ANALYTICS
 # ============================================================
 
+import re
+from collections import defaultdict
+
+
+def canonicalize_product_feature(feature):
+
+    """
+    Consolidate semantically similar product features
+    into standardized technical categories.
+
+    Original feature descriptions are retained separately.
+    """
+
+    text = str(feature).strip().lower()
+
+    text = re.sub(r"[^a-z0-9\s-]", " ", text)
+    text = re.sub(r"\s+", " ", text)
+
+    feature_categories = [
+
+        (
+            "Battery Management",
+            r"\bbattery management\b|\bbattery performance\b"
+        ),
+
+        (
+            "Battery Charging",
+            r"\bbattery charg\w*\b|\bcharging systems?\b"
+        ),
+
+        (
+            "Thermal Management",
+            r"\bthermal management\b|\bthermal regulat\w*\b|\bheat dissipation\b"
+        ),
+
+        (
+            "Protection Mechanisms",
+            r"\bprotection mechanisms?\b|\bovercurrent protection\b|"
+            r"\bovervoltage protection\b|\bshort circuit protection\b"
+        ),
+
+        (
+            "Sensing and Monitoring",
+            r"\bsensing mechanisms?\b|\bsensor systems?\b|"
+            r"\bmonitoring systems?\b|\bmeasurement circuitry\b"
+        ),
+
+        (
+            "Power Regulation",
+            r"\bvoltage regulat\w*\b|\bcurrent regulat\w*\b|"
+            r"\bpower regulat\w*\b"
+        ),
+
+        (
+            "Motor Control",
+            r"\bmotor controllers?\b|\bmotor control\b|"
+            r"\bmotor drive circuitry\b|\bmotor speed\b|\bmotor torque\b"
+        ),
+
+        (
+            "Semiconductor Switching",
+            r"\bsemiconductor switching\b|\bswitching devices?\b|"
+            r"\bgan based\b|\bgan-based\b|\bgallium nitride\b|"
+            r"\bpower mosfet\b"
+        ),
+
+        (
+            "Inverter Systems",
+            r"\binverters?\b|\binverter circuitry\b"
+        ),
+
+        (
+            "Power Conversion",
+            r"\bpower conversion\b|\bpower converters?\b|"
+            r"\bpower conversion circuits?\b"
+        ),
+
+        (
+            "Power Supply Systems",
+            r"\bpower supplies\b|\bpower supply\b"
+        ),
+
+        (
+            "Control Circuitry",
+            r"\bcontrol circuitry\b|\bcontrol circuits?\b|"
+            r"\belectronic control systems?\b"
+        )
+    ]
+
+    for category, pattern in feature_categories:
+
+        if re.search(pattern, text):
+
+            return category
+
+    # Fallback: preserve unrecognized technical features.
+    normalized = _normalize_feature(feature)
+
+    return str(normalized).strip() if normalized else ""
+
 
 def calculate_patent_analytics(patent_results):
 
     """
-    Calculate patent-level and product-feature-level analytics.
+    Calculate patent-level and consolidated product-feature
+    analytics.
 
-    Supported relevance ratings:
+    Similar product features are grouped into standardized
+    technical categories.
 
-        H
-        M+
-        L
-        NR
+    Original feature descriptions and patent-level details
+    are retained for detailed FTO review.
 
-    Duplicate publication numbers are counted only once.
-
-    Feature-level counts may overlap because one patent
-    can correspond to multiple product features.
+    Duplicate publication numbers are counted only once
+    per consolidated feature and relevance rating.
     """
 
     ratings = ["H", "M+", "L", "NR"]
@@ -1392,7 +1490,8 @@ def calculate_patent_analytics(patent_results):
             "M+": set(),
             "L": set(),
             "NR": set(),
-            "patent_details": {}
+            "patent_details": {},
+            "original_features": set()
         }
     )
 
@@ -1411,7 +1510,6 @@ def calculate_patent_analytics(patent_results):
         ).strip()
 
         if not publication_number:
-
             continue
 
         relevance = str(
@@ -1423,10 +1521,8 @@ def calculate_patent_analytics(patent_results):
         ).strip().upper()
 
         if relevance not in ratings:
-
             continue
 
-        # Avoid duplicate publication counting.
         unique_patents[publication_number] = {
 
             "publication_number": publication_number,
@@ -1464,14 +1560,12 @@ def calculate_patent_analytics(patent_results):
 
     for patent in unique_patents.values():
 
-        rating_counts[
-            patent["relevance"]
-        ] += 1
+        rating_counts[patent["relevance"]] += 1
 
     total_patents = len(unique_patents)
 
     # --------------------------------------------------------
-    # STEP 3: PRODUCT FEATURE-WISE PATENT CONCENTRATION
+    # STEP 3: CONSOLIDATE PRODUCT FEATURES
     # --------------------------------------------------------
 
     for record in patent_results:
@@ -1485,7 +1579,6 @@ def calculate_patent_analytics(patent_results):
         ).strip()
 
         if publication_number not in unique_patents:
-
             continue
 
         rating = unique_patents[
@@ -1506,36 +1599,65 @@ def calculate_patent_analytics(patent_results):
                 ""
             )
 
-            match_type = _get_value(
-                comparison,
-                "match_type",
-                ""
-            )
+            match_type = str(
+                _get_value(
+                    comparison,
+                    "match_type",
+                    ""
+                )
+            ).strip()
 
             if not product_feature:
-
                 continue
 
             # No Match is not evidence of correspondence.
-            if match_type == "No Match":
-
+            if match_type.lower() == "no match":
                 continue
 
-            normalized = _normalize_feature(
+            # -----------------------------------------------
+            # SEMANTIC FEATURE CONSOLIDATION
+            # -----------------------------------------------
+
+            normalized = canonicalize_product_feature(
                 product_feature
             )
 
             if not normalized:
-
                 continue
+
+            # -----------------------------------------------
+            # COUNT UNIQUE PUBLICATIONS
+            # -----------------------------------------------
 
             feature_data[normalized][rating].add(
                 publication_number
             )
 
-            feature_data[normalized]["patent_details"][
-                publication_number
-            ] = {
+            # -----------------------------------------------
+            # RETAIN ORIGINAL FEATURE DESCRIPTIONS
+            # -----------------------------------------------
+
+            feature_data[normalized][
+                "original_features"
+            ].add(
+                str(product_feature).strip()
+            )
+
+            # -----------------------------------------------
+            # RETAIN PATENT-LEVEL DETAILS
+            # -----------------------------------------------
+
+            patent_details = feature_data[normalized][
+                "patent_details"
+            ]
+
+            if publication_number not in patent_details:
+
+                patent_details[publication_number] = {
+                    "product_features": []
+                }
+
+            detail = {
 
                 "product_feature": str(
                     product_feature
@@ -1556,8 +1678,16 @@ def calculate_patent_analytics(patent_results):
                 )
             }
 
+            if detail not in patent_details[
+                publication_number
+            ]["product_features"]:
+
+                patent_details[
+                    publication_number
+                ]["product_features"].append(detail)
+
     # --------------------------------------------------------
-    # STEP 4: CALCULATE FEATURE ANALYTICS
+    # STEP 4: CALCULATE CONSOLIDATED FEATURE ANALYTICS
     # --------------------------------------------------------
 
     feature_analytics = []
@@ -1601,10 +1731,28 @@ def calculate_patent_analytics(patent_results):
 
         )
 
+        # -----------------------------------------------
+        # SHORT GRAPH LABEL
+        # -----------------------------------------------
+
+        display_feature = normalized
+
+        if len(display_feature) > 45:
+
+            display_feature = (
+                display_feature[:42].rsplit(" ", 1)[0]
+                + "..."
+            )
+
         feature_analytics.append({
 
+            # Standardized feature category
             "product_feature": normalized,
 
+            # Short graph label
+            "display_feature": display_feature,
+
+            # Number of unique patents by rating
             "H": h_count,
 
             "M+": mplus_count,
@@ -1613,6 +1761,7 @@ def calculate_patent_analytics(patent_results):
 
             "NR": nr_count,
 
+            # Unique publications associated with feature
             "total_patents": total_feature_patents,
 
             "high_relevance_count": high_relevance_count,
@@ -1627,10 +1776,17 @@ def calculate_patent_analytics(patent_results):
                 2
             ),
 
+            # Supporting publications
             "supporting_publication_numbers": sorted(
                 data["H"] | data["M+"]
             ),
 
+            # All original feature descriptions
+            "original_feature_variants": sorted(
+                data["original_features"]
+            ),
+
+            # Detailed patent-level mapping
             "patent_details": data["patent_details"]
 
         })
@@ -1647,7 +1803,9 @@ def calculate_patent_analytics(patent_results):
 
             x["H"],
 
-            x["M+"]
+            x["M+"],
+
+            x["total_patents"]
 
         ),
 
@@ -1694,7 +1852,7 @@ def calculate_patent_analytics(patent_results):
     )
 
     # --------------------------------------------------------
-    # RETURN ANALYTICS
+    # STEP 8: RETURN ANALYTICS
     # --------------------------------------------------------
 
     return {
@@ -1719,7 +1877,6 @@ def calculate_patent_analytics(patent_results):
         )
 
     }
-
 
 # ============================================================
 # 6.4 GENERATE AI GENERATED RECOMMENDATIONS USING LLM

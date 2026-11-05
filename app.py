@@ -865,12 +865,25 @@ def display_portfolio_analytics(analytics):
         ["product_feature"] + rating_columns
     ].copy()
 
+    chart_label_column = (
+            "display_feature"
+            if "display_feature" in feature_df.columns
+            else "product_feature"
+        )
+
+    chart_df = feature_df[
+            [chart_label_column] + rating_columns
+        ].copy()
+
+    chart_df = chart_df.rename(
+            columns={
+                chart_label_column: "product_feature"
+            }
+        )
+
     # --------------------------------------------------------
     # CORRECT SORTING
     # --------------------------------------------------------
-
-    # Calculate row-wise totals instead of using column.sum()
-    # inside pandas sort_values(key=...).
 
     chart_df["_total"] = chart_df[rating_columns].sum(axis=1)
 
