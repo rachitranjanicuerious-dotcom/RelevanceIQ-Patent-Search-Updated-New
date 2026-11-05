@@ -2028,8 +2028,6 @@ a technical FTO screening assessment.
 Your task is to analyse the COMPLETE patent dataset
 against the supplied product description.
 
-Your analysis must be GENERALIZED and TECHNOLOGY-INDEPENDENT.
-
 The product may belong to any technical domain,
 engineering discipline, application area, or industry.
 
@@ -2305,9 +2303,9 @@ return an empty list rather than inventing content.
 
                     "You are an experienced patent portfolio "
 
-                    "analyst. Provide generalized, concise, "
+                    "analyst. Provide concise, "
 
-                    "technology-independent and evidence-based "
+                    "and evidence-based "
 
                     "technical recommendations. Avoid repeating "
 
@@ -3393,9 +3391,7 @@ def generate_ai_recommendations_report(
 
         "product description, patent records, claims and "
 
-        "portfolio coverage. This report does not establish "
-
-        "freedom to operate or constitute a legal opinion."
+        "portfolio coverage. "
 
     )
 
