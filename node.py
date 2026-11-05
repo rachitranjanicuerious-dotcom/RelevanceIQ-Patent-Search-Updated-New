@@ -1931,6 +1931,7 @@ def calculate_patent_analytics(patent_results):
 # 6.4 GENERATE AI GENERATED RECOMMENDATIONS USING LLM
 # ============================================================
 
+
 def generate_ai_recommendations(
 
     patent_results,
@@ -1944,6 +1945,10 @@ def generate_ai_recommendations(
 
     The analysis is technology-independent and suitable
     for different products and industries.
+
+    Recommendations are consolidated around distinct
+    portfolio-level findings rather than individual patents
+    or repeated product feature descriptions.
     """
 
     analytics = calculate_patent_analytics(
@@ -1957,7 +1962,6 @@ def generate_ai_recommendations(
         raise ValueError(
 
             "No valid completed patent analysis results "
-
             "were provided."
 
         )
@@ -1985,7 +1989,6 @@ def generate_ai_recommendations(
             "total_associated_patents": feature["total_patents"],
 
             "supporting_publication_numbers":
-
                 feature["supporting_publication_numbers"]
 
         })
@@ -2083,13 +2086,15 @@ INDIVIDUAL PATENT RESULTS
 ANALYSIS INSTRUCTIONS
 ============================================================
 
-1. Analyse the complete patent portfolio.
+1. Analyse the complete patent portfolio against
+   the supplied product description.
 
-2. Identify significant patterns among H-rated patents.
+2. Identify meaningful patterns among H-rated patents.
 
-3. Identify significant M+-rated patent concentration.
+3. Identify meaningful M+-rated patent concentration.
 
-4. Identify patterns among L and NR patents.
+4. Examine L and NR findings without automatically
+   treating them as technically irrelevant.
 
 5. Examine recurring technical combinations,
    functional relationships, structural arrangements,
@@ -2102,8 +2107,8 @@ ANALYSIS INSTRUCTIONS
 
 8. Distinguish patent concentration from infringement risk.
 
-9. Identify technical investigation directions where
-   supported by the actual patent findings.
+9. Identify technical investigation directions only
+   where supported by the actual patent findings.
 
 10. Do not invent technical alternatives or claim limitations.
 
@@ -2115,8 +2120,73 @@ ANALYSIS INSTRUCTIONS
 13. Feature-level patent counts may overlap because
     one patent may correspond to multiple features.
 
-14. Do not assume L or NR patents have no technical
-    relationship whatsoever.
+14. Do not assume that L or NR patents have no
+    technical relationship whatsoever.
+
+============================================================
+CRITICAL: PORTFOLIO-LEVEL CONSOLIDATION
+============================================================
+
+The number of patents supplied may vary significantly
+between different analyses.
+
+Your recommendations must be based on the number of
+DISTINCT technical or claim-related findings, not on
+the total number of patents.
+
+Apply the following rules:
+
+1. First identify the distinct technical and
+   claim-related findings across the complete dataset.
+
+2. Group semantically similar findings into broader
+   portfolio-level review areas.
+
+3. Treat different descriptions of the same underlying
+   technical functionality as one finding where justified.
+
+4. Multiple patents discussing the same technical area
+   should generally strengthen the evidence for that area,
+   rather than automatically generating additional
+   recommendations.
+
+5. Do not generate one recommendation per patent.
+
+6. Do not generate one recommendation per product feature.
+
+7. Do not split one underlying technical concern into
+   multiple recommendations merely because it appears
+   in different patents.
+
+8. Generate a separate recommendation only when there
+   is a genuinely distinct technical issue, claim limitation,
+   functional relationship, implementation concern,
+   or investigation requirement.
+
+9. A new patent should introduce a new recommendation
+   only when its technical or claim-related evidence
+   identifies a meaningfully different portfolio concern.
+
+10. Additional patents may change the supporting evidence,
+    publication numbers, confidence, and priority of an
+    existing recommendation.
+
+11. Additional patents should not automatically increase
+    the number of recommendations.
+
+12. Do not artificially reduce the number of recommendations
+    either. Preserve genuinely distinct findings.
+
+13. Do not impose a fixed number of recommendations.
+    The number must depend on the distinct findings
+    supported by the supplied evidence.
+
+14. If several patents describe different aspects of one
+    broader technical arrangement, consolidate them only
+    when their relationship is supported by the evidence.
+
+15. Do not combine unrelated technologies merely to
+    reduce the number of recommendations.
 
 ============================================================
 IMPORTANT: AVOID REPETITIVE PRODUCT FEATURES
@@ -2132,7 +2202,7 @@ their patent counts, and relevance distribution.
 Therefore:
 
 1. Do not reproduce individual product feature names
-   as headings in AI recommendations.
+   as recommendation headings.
 
 2. Do not repeat the feature concentration table.
 
@@ -2157,6 +2227,7 @@ Therefore:
 
 The existing schema field "product_feature" must be used
 for a concise portfolio review area or strategic concern.
+
 It must NOT simply repeat an individual product feature.
 
 ============================================================
@@ -2184,6 +2255,14 @@ Predominantly L or NR findings with limited evidence
 of meaningful claim correspondence.
 
 Priority must not be determined using patent counts alone.
+
+Consider:
+
+- Strength of claim correspondence.
+- Nature of the claimed technical limitations.
+- Confidence of the underlying patent assessment.
+- Recurrence of a genuinely similar technical concern.
+- Breadth and significance of the identified issue.
 
 ============================================================
 OUTPUT REQUIREMENTS
@@ -2233,6 +2312,8 @@ Provide practical recommendations for:
 
 Only include recommendations relevant to the supplied data.
 
+Consolidate actions addressing the same underlying concern.
+
 5. POTENTIAL DESIGN ALTERNATIVES
 
 Identify technical directions worth investigating
@@ -2247,6 +2328,9 @@ Do not describe any alternative as a confirmed workaround.
 Identify missing technical information, implementation
 details, claim limitations, patent status, or other
 relevant matters requiring further examination.
+
+Avoid repeating investigation areas already covered
+in other sections unless additional analysis is necessary.
 
 7. CONCLUSION
 
@@ -2269,6 +2353,31 @@ Do not state that:
 A complete FTO assessment requires additional claim
 interpretation, jurisdiction-specific analysis,
 patent status verification, and legal review.
+
+============================================================
+FINAL CONSISTENCY CHECK
+============================================================
+
+Before returning the output, verify:
+
+1. Recommendations represent distinct portfolio concerns.
+
+2. Similar findings across multiple patents are consolidated.
+
+3. No recommendation exists solely because another
+   patent was added to the dataset.
+
+4. Supporting publication numbers actually support
+   the corresponding recommendation.
+
+5. Recommendation priority is evidence-based.
+
+6. Individual product features have not been repeated
+   as recommendation headings.
+
+7. No unsupported technical conclusions are introduced.
+
+8. The output is consistent with the supplied Pydantic schema.
 
 ============================================================
 OUTPUT FORMAT
@@ -2302,14 +2411,13 @@ return an empty list rather than inventing content.
                 content=(
 
                     "You are an experienced patent portfolio "
-
-                    "analyst. Provide concise, "
-
-                    "and evidence-based "
-
-                    "technical recommendations. Avoid repeating "
-
-                    "individual product features."
+                    "analyst. Provide concise, evidence-based "
+                    "technical recommendations. Consolidate "
+                    "semantically similar findings across patents. "
+                    "Do not generate recommendations based merely "
+                    "on the number of patents or repeated product "
+                    "features. Identify only genuinely distinct "
+                    "portfolio-level concerns."
 
                 )
 
@@ -2358,7 +2466,6 @@ return an empty list rather than inventing content.
         raise
 
     return analytics, recommendations
-
 
 # ============================================================
 # 6.5 WORD DOCUMENT FORMATTING HELPERS
