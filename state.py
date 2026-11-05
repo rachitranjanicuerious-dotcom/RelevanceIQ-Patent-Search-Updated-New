@@ -8,16 +8,15 @@ class RelevanceState(TypedDict) :
     publication_number  : str
     title   : str
     abstract  : str
-    independent_claim : str
+    independent_claims : str
     all_claims    : str
 
-    relevance_human : str
+    # relevance_human : str
 
     # Extracted primary and secondary features
     primary_product_features : list[str]
     secondary_product_features : list[str]
 
-    
     primary_patent_features : list[str]
     secondary_patent_features : list[str]
 

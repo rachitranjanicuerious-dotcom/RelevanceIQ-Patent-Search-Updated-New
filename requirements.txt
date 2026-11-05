@@ -11,3 +11,6 @@ huggingface_hub
 grandalf
 scikit-learn
 python-docx
+
+matplotlib
+

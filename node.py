@@ -44,8 +44,8 @@ Title: {row["title"]}
 ABSTRACT:
 {row["Abstract"]}
 
-INDEPENDENT CLAIM:
-{row["Independent Claim"]}
+INDEPENDENT CLAIMS:
+{row["Independent Claims"]}
 
 ALL CLAIMS:
 {row["All Claims"]}
@@ -89,7 +89,7 @@ You are an experienced patent analyst performing an FTO
 Extract technical features from the patent claims.
 
 SOURCE PRIORITY:
-1. Independent Claim — identify core mandatory limitations.
+1. Independent Claims — identify core mandatory limitations.
 2. All Claims — identify additional dependent-claim limitations.
 
 Classify every extracted technical feature into PRIMARY or SECONDARY.
@@ -131,8 +131,8 @@ TITLE:
 ABSTRACT:
 {state["abstract"]}
 
-INDEPENDENT CLAIM:
-{state["independent_claim"]}
+INDEPENDENT CLAIMS:
+{state["independent_claims"]}
       
 ALL CLAIMS:
 {state["all_claims"]}
@@ -715,8 +715,8 @@ Title:
 Abstract:
 {state["abstract"]}
 
-INDEPENDENT CLAIM:
-{state["independent_claim"]}
+INDEPENDENT CLAIMS:
+{state["independent_claims"]}
 
 ALL CLAIMS:
 {state["all_claims"]}
@@ -1064,8 +1064,8 @@ Title:
 Abstract:
 {state["abstract"]}
 
-INDEPENDENT CLAIM:
-{state["independent_claim"]}
+INDEPENDENT CLAIMS:
+{state["independent_claims"]}
 
 ALL CLAIMS:
 {state["all_claims"]}
@@ -1230,13 +1230,59 @@ Return ONLY valid JSON.
     return state
 
 
+
 # ============================================================
-# 6. PORTFOLIO-LEVEL RECOMMENDATIONS & ANALYTICS
+# 6. AI GENERATED RECOMMENDATIONS & ANALYTICS
 # ============================================================
 
-# ------------------------------------------------------------
-# 6.1 PORTFOLIO RECOMMENDATION OUTPUT SCHEMAS
-# ------------------------------------------------------------
+# ============================================================
+# 6.0 REQUIRED IMPORTS
+# ============================================================
+
+import re
+import json
+import time
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+from io import BytesIO
+from collections import defaultdict
+
+from typing import Literal
+
+from pydantic import BaseModel
+
+from langchain_core.messages import (
+    HumanMessage,
+    SystemMessage
+)
+
+from langchain_core.output_parsers import PydanticOutputParser
+
+from docx import Document
+
+from docx.shared import (
+    Inches,
+    Pt,
+    RGBColor
+)
+
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+from docx.enum.table import (
+    WD_TABLE_ALIGNMENT,
+    WD_CELL_VERTICAL_ALIGNMENT
+)
+
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+
+
+# ============================================================
+# 6.1 AI RECOMMENDATION OUTPUT SCHEMAS
+# ============================================================
+
 
 class FeatureRecommendation(BaseModel):
 
@@ -1256,7 +1302,7 @@ class FeatureRecommendation(BaseModel):
     supporting_publication_numbers: list[str]
 
 
-class PortfolioRecommendationsOutput(BaseModel):
+class AIRecommendationsOutput(BaseModel):
 
     executive_summary: str
 
@@ -1264,23 +1310,24 @@ class PortfolioRecommendationsOutput(BaseModel):
 
     lower_priority_features: list[FeatureRecommendation]
 
-    portfolio_recommendations: list[str]
+    recommendations: list[str]
 
     potential_design_alternatives: list[str]
 
     additional_investigation_areas: list[str]
 
-    portfolio_conclusion: str
+    conclusion: str
 
 
-portfolio_parser = PydanticOutputParser(
-    pydantic_object=PortfolioRecommendationsOutput
+ai_recommendations_parser = PydanticOutputParser(
+    pydantic_object=AIRecommendationsOutput
 )
 
 
-# ------------------------------------------------------------
+# ============================================================
 # 6.2 HELPER FUNCTIONS
-# ------------------------------------------------------------
+# ============================================================
+
 
 def _get_value(record, key, default=None):
 
@@ -1289,6 +1336,7 @@ def _get_value(record, key, default=None):
     """
 
     if isinstance(record, dict):
+
         return record.get(key, default)
 
     return getattr(record, key, default)
@@ -1297,7 +1345,7 @@ def _get_value(record, key, default=None):
 def _normalize_feature(feature):
 
     """
-    Normalize feature names for portfolio aggregation.
+    Normalize product feature names for aggregation.
     """
 
     feature = str(feature).strip().lower()
@@ -1307,29 +1355,30 @@ def _normalize_feature(feature):
     return feature
 
 
-# ------------------------------------------------------------
-# 6.3 PORTFOLIO ANALYTICS
-# ------------------------------------------------------------
+# ============================================================
+# 6.3 PATENT PORTFOLIO ANALYTICS
+# ============================================================
 
-def calculate_portfolio_analytics(portfolio_results):
+
+def calculate_patent_analytics(patent_results):
 
     """
-    Calculate portfolio-level patent and product-feature analytics.
+    Calculate patent-level and product-feature-level analytics.
 
-    Input:
-        portfolio_results = list of completed patent analysis states.
+    Supported relevance ratings:
 
-    Each result should contain:
-        publication_number
-        title
-        relevance
-        confidence
-        rationale
-        reasoning
-        comparison
+        H
+        M+
+        L
+        NR
+
+    Duplicate publication numbers are counted only once.
+
+    Feature-level counts may overlap because one patent
+    can correspond to multiple product features.
     """
 
-    ratings = ["H", "M+", "M", "L", "NR"]
+    ratings = ["H", "M+", "L", "NR"]
 
     rating_counts = {
         rating: 0 for rating in ratings
@@ -1341,57 +1390,102 @@ def calculate_portfolio_analytics(portfolio_results):
         lambda: {
             "H": set(),
             "M+": set(),
-            "M": set(),
             "L": set(),
             "NR": set(),
             "patent_details": {}
         }
     )
 
-    for record in portfolio_results:
+    # --------------------------------------------------------
+    # STEP 1: COLLECT UNIQUE PATENTS
+    # --------------------------------------------------------
+
+    for record in patent_results:
 
         publication_number = str(
-            _get_value(record, "publication_number", "")
+            _get_value(
+                record,
+                "publication_number",
+                ""
+            )
         ).strip()
 
         if not publication_number:
+
             continue
 
         relevance = str(
-            _get_value(record, "relevance", "NR")
+            _get_value(
+                record,
+                "relevance",
+                "NR"
+            )
         ).strip().upper()
 
         if relevance not in ratings:
+
             continue
 
-        # Use publication number to avoid duplicate patent counting.
+        # Avoid duplicate publication counting.
         unique_patents[publication_number] = {
+
             "publication_number": publication_number,
-            "title": _get_value(record, "title", ""),
+
+            "title": _get_value(
+                record,
+                "title",
+                ""
+            ),
+
             "relevance": relevance,
-            "confidence": _get_value(record, "confidence", 0),
-            "rationale": _get_value(record, "rationale", ""),
-            "reasoning": _get_value(record, "reasoning", "")
+
+            "confidence": _get_value(
+                record,
+                "confidence",
+                0
+            ),
+
+            "rationale": _get_value(
+                record,
+                "rationale",
+                ""
+            ),
+
+            "reasoning": _get_value(
+                record,
+                "reasoning",
+                ""
+            )
         }
 
-    # Count unique patents by rating.
+    # --------------------------------------------------------
+    # STEP 2: COUNT UNIQUE PATENTS BY RATING
+    # --------------------------------------------------------
+
     for patent in unique_patents.values():
 
-        rating_counts[patent["relevance"]] += 1
+        rating_counts[
+            patent["relevance"]
+        ] += 1
 
     total_patents = len(unique_patents)
 
     # --------------------------------------------------------
-    # PRODUCT FEATURE-WISE PATENT CONCENTRATION
+    # STEP 3: PRODUCT FEATURE-WISE PATENT CONCENTRATION
     # --------------------------------------------------------
 
-    for record in portfolio_results:
+    for record in patent_results:
 
         publication_number = str(
-            _get_value(record, "publication_number", "")
+            _get_value(
+                record,
+                "publication_number",
+                ""
+            )
         ).strip()
 
         if publication_number not in unique_patents:
+
             continue
 
         rating = unique_patents[
@@ -1419,11 +1513,12 @@ def calculate_portfolio_analytics(portfolio_results):
             )
 
             if not product_feature:
+
                 continue
 
-            # A No Match is not evidence of a corresponding
-            # product feature in the patent.
+            # No Match is not evidence of correspondence.
             if match_type == "No Match":
+
                 continue
 
             normalized = _normalize_feature(
@@ -1431,6 +1526,7 @@ def calculate_portfolio_analytics(portfolio_results):
             )
 
             if not normalized:
+
                 continue
 
             feature_data[normalized][rating].add(
@@ -1440,13 +1536,19 @@ def calculate_portfolio_analytics(portfolio_results):
             feature_data[normalized]["patent_details"][
                 publication_number
             ] = {
-                "product_feature": str(product_feature),
+
+                "product_feature": str(
+                    product_feature
+                ),
+
                 "match_type": match_type,
+
                 "patent_feature": _get_value(
                     comparison,
                     "patent_feature",
                     ""
                 ),
+
                 "reasoning": _get_value(
                     comparison,
                     "reasoning",
@@ -1454,38 +1556,49 @@ def calculate_portfolio_analytics(portfolio_results):
                 )
             }
 
+    # --------------------------------------------------------
+    # STEP 4: CALCULATE FEATURE ANALYTICS
+    # --------------------------------------------------------
+
     feature_analytics = []
 
     for normalized, data in feature_data.items():
 
         h_count = len(data["H"])
+
         mplus_count = len(data["M+"])
-        m_count = len(data["M"])
+
         l_count = len(data["L"])
+
         nr_count = len(data["NR"])
 
-        high_relevance_count = h_count + mplus_count
+        high_relevance_count = (
+            h_count + mplus_count
+        )
 
         total_feature_patents = len(
             set().union(
                 data["H"],
                 data["M+"],
-                data["M"],
                 data["L"],
                 data["NR"]
             )
         )
 
-        # Feature concentration relative to the complete portfolio.
         portfolio_concentration = (
+
             high_relevance_count / total_patents * 100
+
             if total_patents else 0
+
         )
 
-        # H share among patents associated with this feature.
         h_share = (
+
             h_count / total_feature_patents * 100
+
             if total_feature_patents else 0
+
         )
 
         feature_analytics.append({
@@ -1493,9 +1606,11 @@ def calculate_portfolio_analytics(portfolio_results):
             "product_feature": normalized,
 
             "H": h_count,
+
             "M+": mplus_count,
-            "M": m_count,
+
             "L": l_count,
+
             "NR": nr_count,
 
             "total_patents": total_feature_patents,
@@ -1503,53 +1618,84 @@ def calculate_portfolio_analytics(portfolio_results):
             "high_relevance_count": high_relevance_count,
 
             "portfolio_concentration": round(
-                portfolio_concentration, 2
+                portfolio_concentration,
+                2
             ),
 
-            "h_share": round(h_share, 2),
+            "h_share": round(
+                h_share,
+                2
+            ),
 
             "supporting_publication_numbers": sorted(
-                set().union(
-                    data["H"],
-                    data["M+"]
-                )
+                data["H"] | data["M+"]
             ),
 
             "patent_details": data["patent_details"]
+
         })
 
-    # Sort by H + M+ patent concentration.
+    # --------------------------------------------------------
+    # STEP 5: SORT FEATURES
+    # --------------------------------------------------------
+
     feature_analytics.sort(
+
         key=lambda x: (
+
             x["high_relevance_count"],
+
             x["H"],
+
             x["M+"]
+
         ),
+
         reverse=True
+
     )
 
     # --------------------------------------------------------
-    # PORTFOLIO SUMMARY
+    # STEP 6: OVERALL RATING PERCENTAGES
     # --------------------------------------------------------
 
     rating_percentages = {
 
         rating: round(
-            count / total_patents * 100,
+
+            rating_counts[rating] / total_patents * 100,
+
             2
+
         ) if total_patents else 0
 
-        for rating, count in rating_counts.items()
+        for rating in ratings
+
     }
 
+    # --------------------------------------------------------
+    # STEP 7: HIGH-PRIORITY PATENT COUNT
+    # --------------------------------------------------------
+
     high_priority_patents = (
-        rating_counts["H"] + rating_counts["M+"]
+
+        rating_counts["H"]
+
+        + rating_counts["M+"]
+
     )
 
     high_priority_percentage = (
+
         high_priority_patents / total_patents * 100
+
         if total_patents else 0
+
     )
+
+    # --------------------------------------------------------
+    # RETURN ANALYTICS
+    # --------------------------------------------------------
 
     return {
 
@@ -1562,7 +1708,8 @@ def calculate_portfolio_analytics(portfolio_results):
         "high_priority_patents": high_priority_patents,
 
         "high_priority_percentage": round(
-            high_priority_percentage, 2
+            high_priority_percentage,
+            2
         ),
 
         "feature_analytics": feature_analytics,
@@ -1570,27 +1717,38 @@ def calculate_portfolio_analytics(portfolio_results):
         "patent_records": list(
             unique_patents.values()
         )
+
     }
 
 
-# ------------------------------------------------------------
-# 6.4 GENERATE PORTFOLIO RECOMMENDATIONS USING LLM
-# ------------------------------------------------------------
+# ============================================================
+# 6.4 GENERATE AI GENERATED RECOMMENDATIONS USING LLM
+# ============================================================
 
-def generate_portfolio_recommendations(
-    portfolio_results,
+
+def generate_ai_recommendations(
+    patent_results,
     product_description
 ):
 
     """
-    Generate consolidated portfolio-level recommendations.
+    Generate consolidated AI recommendations.
 
-    The LLM receives the complete portfolio analytics,
-    not individual patent analysis states.
+    The LLM receives:
+
+        1. Product description
+        2. Overall patent distribution
+        3. Feature-wise patent concentration
+        4. Individual patent analysis results
+
+    Returns:
+
+        analytics
+        recommendations
     """
 
-    analytics = calculate_portfolio_analytics(
-        portfolio_results
+    analytics = calculate_patent_analytics(
+        patent_results
     )
 
     if analytics["total_patents"] == 0:
@@ -1600,7 +1758,10 @@ def generate_portfolio_recommendations(
             "were provided."
         )
 
-    # Prepare compact feature-level evidence.
+    # --------------------------------------------------------
+    # PREPARE FEATURE SUMMARY
+    # --------------------------------------------------------
+
     feature_summary = []
 
     for feature in analytics["feature_analytics"]:
@@ -1613,8 +1774,6 @@ def generate_portfolio_recommendations(
 
             "Mplus_patents": feature["M+"],
 
-            "M_patents": feature["M"],
-
             "L_patents": feature["L"],
 
             "NR_patents": feature["NR"],
@@ -1626,30 +1785,46 @@ def generate_portfolio_recommendations(
 
         })
 
+    # --------------------------------------------------------
+    # PREPARE PATENT SUMMARY
+    # --------------------------------------------------------
+
     patent_summary = [
 
         {
-            "publication_number": p["publication_number"],
-            "title": p["title"],
-            "rating": p["relevance"],
-            "confidence": p["confidence"],
-            "rationale": p["rationale"],
-            "reasoning": p["reasoning"]
+
+            "publication_number": patent["publication_number"],
+
+            "title": patent["title"],
+
+            "rating": patent["relevance"],
+
+            "confidence": patent["confidence"],
+
+            "rationale": patent["rationale"],
+
+            "reasoning": patent["reasoning"]
+
         }
 
-        for p in analytics["patent_records"]
+        for patent in analytics["patent_records"]
 
     ]
+
+    # --------------------------------------------------------
+    # AI PROMPT
+    # --------------------------------------------------------
 
     recommendation_prompt = f"""
 
 You are a senior patent portfolio analyst conducting
-a portfolio-level technical FTO assessment.
+a technical FTO screening assessment.
 
-Your task is to analyse the COMPLETE patent portfolio
-for the supplied product.
+Your task is to analyse the COMPLETE patent dataset
+against the supplied product description.
 
-This is NOT an individual patent recommendation exercise.
+This is a portfolio-level assessment and not an
+individual patent recommendation exercise.
 
 ============================================================
 PRODUCT DESCRIPTION
@@ -1657,24 +1832,35 @@ PRODUCT DESCRIPTION
 
 {product_description}
 
+
 ============================================================
-PORTFOLIO STATISTICS
+OVERALL PATENT STATISTICS
 ============================================================
 
 Total unique patents:
+
 {analytics["total_patents"]}
 
+
 Rating distribution:
+
 {json.dumps(analytics["rating_counts"], indent=2)}
 
+
 Rating percentages:
+
 {json.dumps(analytics["rating_percentages"], indent=2)}
 
+
 Total H + M+ patents:
+
 {analytics["high_priority_patents"]}
 
+
 H + M+ portfolio percentage:
+
 {analytics["high_priority_percentage"]}%
+
 
 ============================================================
 PRODUCT FEATURE-WISE PATENT CONCENTRATION
@@ -1682,140 +1868,182 @@ PRODUCT FEATURE-WISE PATENT CONCENTRATION
 
 {json.dumps(feature_summary, indent=2)}
 
+
 ============================================================
 INDIVIDUAL PATENT RESULTS
 ============================================================
 
 {json.dumps(patent_summary, indent=2)}
 
+
 ============================================================
 ANALYSIS INSTRUCTIONS
 ============================================================
 
-1. Identify the product features associated with the
-largest concentration of H patents.
+1. Identify product features associated with the
+   largest concentration of H patents.
 
-2. Identify features with significant M+ patent concentration.
+2. Identify features with significant M+ concentration.
 
-3. Identify features that attract both H and M+ patents.
+3. Identify features attracting both H and M+ patents.
 
-4. Identify features predominantly associated with L and NR patents.
+4. Identify features predominantly associated with
+   L and NR patents.
 
-5. Identify technical combinations that repeatedly appear
-in multiple H or M+ patents.
+5. Identify recurring technical combinations appearing
+   across multiple H or M+ patents.
 
 6. Explain which product features deserve the highest
-priority for further patent review.
+   priority for further patent review.
 
 7. Recommend areas where alternative technical
-implementations could be investigated.
+   implementations could be investigated.
 
 8. Identify product features requiring additional
-technical documentation to resolve uncertainty.
+   technical documentation to resolve uncertainty.
 
 9. Distinguish patent concentration from infringement risk.
-A higher patent count does not establish infringement.
+   A higher patent count does not establish infringement.
 
 10. Do not invent technical alternatives or claim limitations.
-Any suggested design alternative must be framed as an
-area for investigation, not as a confirmed workaround.
+    Suggested design alternatives must be framed as areas
+    for investigation, not confirmed workarounds.
 
 11. Use actual publication numbers when identifying
-supporting patents.
+    supporting patents.
 
-12. Do not count duplicate publication numbers as
-separate patents.
+12. Never count duplicate publication numbers twice.
 
-13. Feature-level patent counts may overlap because
-one patent may correspond to multiple product features.
-Do not describe these as unique portfolio totals.
+13. Feature-level patent counts may overlap because one
+    patent may correspond to multiple product features.
 
 14. Do not infer that L or NR patents have no technical
-relationship whatsoever. Explain the limited correspondence
-according to their existing assessments.
+    relationship whatsoever.
+
+15. Consider actual claim correspondence and confidence,
+    not patent counts alone.
 
 ============================================================
 RECOMMENDATION PRIORITY
 ============================================================
 
 Highest:
-Features with the strongest H patent concentration.
+
+Features with the strongest H patent concentration
+and meaningful claim correspondence.
 
 High:
-Features with substantial H + M+ patent concentration.
+
+Features with substantial H + M+ concentration.
 
 Moderate:
+
 Features with limited H/M+ concentration or material
 claim-related uncertainty.
 
 Lower:
+
 Features predominantly associated with L or NR patents.
 
-Do not assign priority using patent counts alone.
-Consider the actual claim correspondence and confidence.
-
 ============================================================
-IMPORTANT
+IMPORTANT LIMITATIONS
 ============================================================
 
 This report is a technical portfolio screening assessment.
 
 Do not state that:
-- the product infringes;
-- the product is free from infringement;
-- a design alternative guarantees avoidance;
-- the portfolio represents all existing patents.
+
+- The product infringes.
+- The product is free from infringement.
+- A design alternative guarantees avoidance.
+- The supplied portfolio represents all existing patents.
 
 ============================================================
-OUTPUT
+OUTPUT REQUIREMENTS
 ============================================================
 
 Generate:
 
 1. Executive portfolio summary.
+
+   Keep it crisp and concise, approximately 3-5 sentences.
+
 2. Highest-priority product features.
+
 3. Lower-priority product features.
-4. Portfolio-level recommendations.
-5. Potential design alternatives for further investigation.
+
+4. Actionable portfolio recommendations.
+
+5. Potential design alternatives for investigation.
+
 6. Additional investigation areas.
-7. Portfolio conclusion.
 
-Return only valid JSON.
+7. Overall portfolio conclusion.
 
-{portfolio_parser.get_format_instructions()}
+Keep feature-level analysis concise and evidence-based.
+
+Return valid JSON only.
+
+{ai_recommendations_parser.get_format_instructions()}
+
 """
+
+    # --------------------------------------------------------
+    # CALL LLM
+    # --------------------------------------------------------
 
     start = time.time()
 
     response = llm.invoke(
+
         [
+
             SystemMessage(
+
                 content=(
+
                     "You are an experienced patent portfolio "
-                    "analyst. Provide evidence-based portfolio "
-                    "recommendations."
+                    "analyst. Provide concise, evidence-based "
+                    "technical recommendations."
+
                 )
+
             ),
-            HumanMessage(content=recommendation_prompt)
+
+            HumanMessage(
+                content=recommendation_prompt
+            )
+
         ]
+
     )
 
     print(
-        "Portfolio recommendation duration:",
+
+        "AI recommendation duration:",
+
         time.time() - start
+
     )
+
+    # --------------------------------------------------------
+    # PARSE RESPONSE
+    # --------------------------------------------------------
 
     try:
 
-        recommendations = portfolio_parser.parse(
+        recommendations = ai_recommendations_parser.parse(
             response.content
         )
 
     except Exception as e:
 
         print("=" * 80)
-        print("PORTFOLIO RECOMMENDATION PARSING ERROR")
+
+        print("AI RECOMMENDATION PARSING ERROR")
+
         print(e)
+
         print(response.content)
 
         raise
@@ -1823,17 +2051,23 @@ Return only valid JSON.
     return analytics, recommendations
 
 
-# ------------------------------------------------------------
+# ============================================================
 # 6.5 WORD DOCUMENT FORMATTING HELPERS
-# ------------------------------------------------------------
+# ============================================================
+
 
 def _set_cell_background(cell, color):
 
     shading = OxmlElement("w:shd")
 
-    shading.set(qn("w:fill"), color)
+    shading.set(
+        qn("w:fill"),
+        color
+    )
 
-    cell._tc.get_or_add_tcPr().append(shading)
+    cell._tc.get_or_add_tcPr().append(
+        shading
+    )
 
 
 def _format_table_header(table):
@@ -1852,7 +2086,9 @@ def _format_table_header(table):
                 run.font.bold = True
 
                 run.font.color.rgb = RGBColor(
-                    255, 255, 255
+                    255,
+                    255,
+                    255
                 )
 
 
@@ -1863,17 +2099,24 @@ def _add_dataframe_style_table(
 ):
 
     table = document.add_table(
+
         rows=1,
+
         cols=len(headers)
+
     )
 
     table.style = "Table Grid"
 
-    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.alignment = (
+        WD_TABLE_ALIGNMENT.CENTER
+    )
 
     for index, header in enumerate(headers):
 
-        table.rows[0].cells[index].text = str(header)
+        table.rows[0].cells[index].text = str(
+            header
+        )
 
     _format_table_header(table)
 
@@ -1883,38 +2126,314 @@ def _add_dataframe_style_table(
 
         for index, value in enumerate(row):
 
-            cells[index].text = str(value)
+            cells[index].text = str(
+                value
+            )
 
             cells[index].vertical_alignment = (
+
                 WD_CELL_VERTICAL_ALIGNMENT.CENTER
+
             )
 
     return table
 
 
-# ------------------------------------------------------------
-# 6.6 PORTFOLIO WORD REPORT GENERATOR
-# ------------------------------------------------------------
+# ============================================================
+# 6.6 GENERATE PATENT ANALYTICS GRAPHS
+# ============================================================
 
-def generate_recommendations_report(
-    portfolio_results,
-    product_description
+
+def _create_recommendation_charts(analytics):
+
+    """
+    Generate graphs for:
+
+        1. H / M+ / L / NR patent distribution.
+        2. Feature-wise patent concentration.
+
+    Returns:
+        Dictionary containing BytesIO chart images.
+    """
+
+    chart_images = {}
+
+    # --------------------------------------------------------
+    # CHART 1: PATENT RELEVANCE DISTRIBUTION
+    # --------------------------------------------------------
+
+    counts = analytics["rating_counts"]
+
+    fig, ax = plt.subplots(
+        figsize=(7, 3.5)
+    )
+
+    ratings = list(counts.keys())
+
+    values = list(counts.values())
+
+    bars = ax.bar(
+        ratings,
+        values
+    )
+
+    ax.set_title(
+        "Patent Relevance Distribution"
+    )
+
+    ax.set_xlabel(
+        "Relevance Rating"
+    )
+
+    ax.set_ylabel(
+        "Number of Patents"
+    )
+
+    ax.set_ylim(
+        0,
+        max(values, default=0) * 1.15 + 1
+    )
+
+    for bar, value in zip(bars, values):
+
+        ax.text(
+
+            bar.get_x() + bar.get_width() / 2,
+
+            bar.get_height(),
+
+            str(value),
+
+            ha="center",
+
+            va="bottom"
+
+        )
+
+    fig.tight_layout()
+
+    image_buffer = BytesIO()
+
+    fig.savefig(
+
+        image_buffer,
+
+        format="png",
+
+        dpi=180
+
+    )
+
+    image_buffer.seek(0)
+
+    chart_images["rating"] = image_buffer
+
+    plt.close(fig)
+
+    # --------------------------------------------------------
+    # CHART 2: FEATURE-WISE PATENT CONCENTRATION
+    # --------------------------------------------------------
+
+    features = analytics["feature_analytics"][:10]
+
+    if features:
+
+        names = [
+
+            item["product_feature"]
+
+            for item in features
+
+        ]
+
+        h_values = [
+
+            item["H"]
+
+            for item in features
+
+        ]
+
+        mplus_values = [
+
+            item["M+"]
+
+            for item in features
+
+        ]
+
+        l_values = [
+
+            item["L"]
+
+            for item in features
+
+        ]
+
+        nr_values = [
+
+            item["NR"]
+
+            for item in features
+
+        ]
+
+        fig, ax = plt.subplots(
+            figsize=(9, 5)
+        )
+
+        y = np.arange(
+            len(names)
+        )
+
+        ax.barh(
+            y,
+            h_values,
+            label="H"
+        )
+
+        ax.barh(
+
+            y,
+
+            mplus_values,
+
+            left=h_values,
+
+            label="M+"
+
+        )
+
+        left_l = (
+
+            np.array(h_values)
+
+            + np.array(mplus_values)
+
+        )
+
+        ax.barh(
+
+            y,
+
+            l_values,
+
+            left=left_l,
+
+            label="L"
+
+        )
+
+        left_nr = (
+
+            left_l
+
+            + np.array(l_values)
+
+        )
+
+        ax.barh(
+
+            y,
+
+            nr_values,
+
+            left=left_nr,
+
+            label="NR"
+
+        )
+
+        ax.set_yticks(y)
+
+        ax.set_yticklabels(names)
+
+        ax.invert_yaxis()
+
+        ax.set_xlabel(
+            "Number of Associated Patents"
+        )
+
+        ax.set_title(
+            "Top 10 Product Features - Patent Concentration"
+        )
+
+        ax.legend()
+
+        fig.tight_layout()
+
+        image_buffer = BytesIO()
+
+        fig.savefig(
+
+            image_buffer,
+
+            format="png",
+
+            dpi=180
+
+        )
+
+        image_buffer.seek(0)
+
+        chart_images["features"] = image_buffer
+
+        plt.close(fig)
+
+    return chart_images
+
+
+# ============================================================
+# 6.7 AI GENERATED RECOMMENDATIONS WORD REPORT
+# ============================================================
+
+
+def generate_ai_recommendations_report(
+
+    patent_results,
+
+    product_description,
+
+    analytics=None,
+
+    recommendations=None
+
 ):
 
     """
-    Generate a downloadable portfolio-level FTO
-    recommendations report in Word format.
+    Generate a downloadable Word document containing:
 
-    Returns:
-        BytesIO object containing the DOCX document.
+        1. Executive Summary
+        2. Patent Distribution
+        3. Patent Analytics Graphs
+        4. Feature-wise Patent Concentration
+        5. Highest-Priority Features
+        6. Lower-Priority Features
+        7. AI Recommendations
+        8. Potential Design Alternatives
+        9. Additional Investigation Areas
+        10. Conclusion
+        11. Assessment Limitations
+
+    If analytics and recommendations are already supplied,
+    no additional LLM call is made.
     """
 
-    analytics, recommendations = (
-        generate_portfolio_recommendations(
-            portfolio_results,
-            product_description
+    # --------------------------------------------------------
+    # GENERATE RECOMMENDATIONS IF NOT PROVIDED
+    # --------------------------------------------------------
+
+    if analytics is None or recommendations is None:
+
+        analytics, recommendations = (
+            generate_ai_recommendations(
+
+                patent_results,
+
+                product_description
+
+            )
         )
-    )
 
     document = Document()
 
@@ -1925,48 +2444,75 @@ def generate_recommendations_report(
     section = document.sections[0]
 
     section.top_margin = Inches(0.65)
+
     section.bottom_margin = Inches(0.65)
+
     section.left_margin = Inches(0.7)
+
     section.right_margin = Inches(0.7)
 
     styles = document.styles
 
     styles["Normal"].font.name = "Arial"
+
     styles["Normal"].font.size = Pt(9)
 
     styles["Title"].font.name = "Arial"
+
     styles["Title"].font.size = Pt(24)
+
     styles["Title"].font.bold = True
+
     styles["Title"].font.color.rgb = RGBColor(
-        7, 20, 38
+        7,
+        20,
+        38
     )
 
     styles["Heading 1"].font.color.rgb = RGBColor(
-        7, 20, 38
+        7,
+        20,
+        38
     )
 
     # --------------------------------------------------------
-    # TITLE PAGE / HEADER
+    # TITLE
     # --------------------------------------------------------
 
     title = document.add_heading(
+
         "RelevanceIQ",
+
         level=0
+
     )
 
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    title.alignment = (
+        WD_ALIGN_PARAGRAPH.CENTER
+    )
 
     subtitle = document.add_paragraph(
-        "Portfolio-Level FTO Recommendations & Analytics"
+
+        "AI Generated Recommendations"
+
     )
 
-    subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    subtitle.alignment = (
+        WD_ALIGN_PARAGRAPH.CENTER
+    )
 
     subtitle.runs[0].bold = True
 
+    # --------------------------------------------------------
+    # PRODUCT OVERVIEW
+    # --------------------------------------------------------
+
     document.add_heading(
+
         "Product Overview",
+
         level=1
+
     )
 
     document.add_paragraph(
@@ -1974,30 +2520,40 @@ def generate_recommendations_report(
     )
 
     document.add_paragraph(
+
         "Technical screening report based on the supplied "
-        "patent portfolio and product description."
+        "product description and patent analysis results."
+
     )
 
     # --------------------------------------------------------
-    # EXECUTIVE SUMMARY
+    # 1. EXECUTIVE SUMMARY
     # --------------------------------------------------------
 
     document.add_heading(
+
         "1. Executive Summary",
+
         level=1
+
     )
 
     document.add_paragraph(
+
         recommendations.executive_summary
+
     )
 
     # --------------------------------------------------------
-    # OVERALL PORTFOLIO ANALYTICS
+    # 2. PATENT RELEVANCE DISTRIBUTION
     # --------------------------------------------------------
 
     document.add_heading(
-        "2. Overall Patent Portfolio Distribution",
+
+        "2. Patent Relevance Distribution",
+
         level=1
+
     )
 
     _add_dataframe_style_table(
@@ -2005,14 +2561,19 @@ def generate_recommendations_report(
         document,
 
         [
+
             "Rating",
+
             "Patent Count",
+
             "Portfolio Percentage"
+
         ],
 
         [
 
             [
+
                 rating,
 
                 analytics["rating_counts"][rating],
@@ -2021,36 +2582,83 @@ def generate_recommendations_report(
 
             ]
 
-            for rating in ["H", "M+", "M", "L", "NR"]
+            for rating in ["H", "M+", "L", "NR"]
 
         ]
 
     )
 
     document.add_paragraph(
+
         f'Total unique patents analysed: '
+
         f'{analytics["total_patents"]}'
+
     )
 
     document.add_paragraph(
+
         f'H + M+ patents: '
+
         f'{analytics["high_priority_patents"]} '
+
         f'({analytics["high_priority_percentage"]}%)'
+
     )
 
     # --------------------------------------------------------
-    # PRODUCT FEATURE ANALYTICS
+    # 3. PATENT ANALYTICS GRAPHS
     # --------------------------------------------------------
 
     document.add_heading(
-        "3. Product Feature-Wise Patent Concentration",
+
+        "3. Patent Analytics",
+
         level=1
+
+    )
+
+    charts = _create_recommendation_charts(
+        analytics
+    )
+
+    document.add_picture(
+
+        charts["rating"],
+
+        width=Inches(5.8)
+
+    )
+
+    if "features" in charts:
+
+        document.add_picture(
+
+            charts["features"],
+
+            width=Inches(6.5)
+
+        )
+
+    # --------------------------------------------------------
+    # 4. FEATURE-WISE PATENT CONCENTRATION
+    # --------------------------------------------------------
+
+    document.add_heading(
+
+        "4. Product Feature-Wise Patent Concentration",
+
+        level=1
+
     )
 
     document.add_paragraph(
+
         "Feature-level counts represent distinct publication "
         "numbers associated with each product feature. "
-        "A patent may appear under multiple product features."
+        "A patent may appear under multiple product features. "
+        "Therefore, feature-level counts may overlap."
+
     )
 
     feature_rows = []
@@ -2064,8 +2672,6 @@ def generate_recommendations_report(
             feature["H"],
 
             feature["M+"],
-
-            feature["M"],
 
             feature["L"],
 
@@ -2084,14 +2690,21 @@ def generate_recommendations_report(
             document,
 
             [
+
                 "Product Feature",
+
                 "H",
+
                 "M+",
-                "M",
+
                 "L",
+
                 "NR",
+
                 "H + M+",
+
                 "Portfolio %"
+
             ],
 
             feature_rows
@@ -2101,162 +2714,275 @@ def generate_recommendations_report(
     else:
 
         document.add_paragraph(
+
             "No usable feature-level comparison data was available."
+
         )
 
     # --------------------------------------------------------
-    # HIGHEST PRIORITY FEATURES
+    # 5. HIGHEST-PRIORITY FEATURES
     # --------------------------------------------------------
 
     document.add_heading(
-        "4. Highest-Priority Product Features",
+
+        "5. Highest-Priority Product Features",
+
         level=1
+
     )
 
-    for item in recommendations.highest_priority_features:
+    if recommendations.highest_priority_features:
 
-        document.add_heading(
-            item.product_feature,
-            level=2
-        )
+        for item in recommendations.highest_priority_features:
 
-        document.add_paragraph(
-            f"Priority: {item.priority}"
-        )
+            document.add_heading(
 
-        document.add_paragraph(
-            f"Analysis: {item.analysis}"
-        )
+                item.product_feature,
 
-        document.add_paragraph(
-            f"Recommendation: {item.recommendation}"
-        )
+                level=2
 
-        document.add_paragraph(
-            "Supporting publications: "
-            + ", ".join(
-                item.supporting_publication_numbers
             )
-        )
 
-    # --------------------------------------------------------
-    # LOWER PRIORITY FEATURES
-    # --------------------------------------------------------
+            document.add_paragraph(
 
-    document.add_heading(
-        "5. Lower-Priority Product Features",
-        level=1
-    )
+                f"Priority: {item.priority}"
 
-    for item in recommendations.lower_priority_features:
-
-        document.add_heading(
-            item.product_feature,
-            level=2
-        )
-
-        document.add_paragraph(
-            f"Priority: {item.priority}"
-        )
-
-        document.add_paragraph(
-            f"Analysis: {item.analysis}"
-        )
-
-        document.add_paragraph(
-            f"Recommendation: {item.recommendation}"
-        )
-
-        document.add_paragraph(
-            "Supporting publications: "
-            + ", ".join(
-                item.supporting_publication_numbers
             )
-        )
 
-    # --------------------------------------------------------
-    # PORTFOLIO RECOMMENDATIONS
-    # --------------------------------------------------------
+            document.add_paragraph(
 
-    document.add_heading(
-        "6. Portfolio-Level Recommendations",
-        level=1
-    )
+                f"Analysis: {item.analysis}"
 
-    for recommendation in (
-        recommendations.portfolio_recommendations
-    ):
+            )
+
+            document.add_paragraph(
+
+                f"Recommendation: {item.recommendation}"
+
+            )
+
+            document.add_paragraph(
+
+                "Supporting publications: "
+
+                + ", ".join(
+
+                    item.supporting_publication_numbers
+
+                )
+
+            )
+
+    else:
 
         document.add_paragraph(
-            recommendation,
-            style="List Bullet"
+
+            "No highest-priority features were identified."
+
         )
 
     # --------------------------------------------------------
-    # POTENTIAL DESIGN ALTERNATIVES
+    # 6. LOWER-PRIORITY FEATURES
     # --------------------------------------------------------
 
     document.add_heading(
-        "7. Potential Design Alternatives",
+
+        "6. Lower-Priority Product Features",
+
         level=1
+
+    )
+
+    if recommendations.lower_priority_features:
+
+        for item in recommendations.lower_priority_features:
+
+            document.add_heading(
+
+                item.product_feature,
+
+                level=2
+
+            )
+
+            document.add_paragraph(
+
+                f"Priority: {item.priority}"
+
+            )
+
+            document.add_paragraph(
+
+                f"Analysis: {item.analysis}"
+
+            )
+
+            document.add_paragraph(
+
+                f"Recommendation: {item.recommendation}"
+
+            )
+
+            document.add_paragraph(
+
+                "Supporting publications: "
+
+                + ", ".join(
+
+                    item.supporting_publication_numbers
+
+                )
+
+            )
+
+    else:
+
+        document.add_paragraph(
+
+            "No lower-priority features were identified."
+
+        )
+
+    # --------------------------------------------------------
+    # 7. AI GENERATED RECOMMENDATIONS
+    # --------------------------------------------------------
+
+    document.add_heading(
+
+        "7. AI Generated Recommendations",
+
+        level=1
+
+    )
+
+    if recommendations.recommendations:
+
+        for recommendation in recommendations.recommendations:
+
+            document.add_paragraph(
+
+                recommendation,
+
+                style="List Bullet"
+
+            )
+
+    else:
+
+        document.add_paragraph(
+
+            "No additional recommendations were generated."
+
+        )
+
+    # --------------------------------------------------------
+    # 8. POTENTIAL DESIGN ALTERNATIVES
+    # --------------------------------------------------------
+
+    document.add_heading(
+
+        "8. Potential Design Alternatives",
+
+        level=1
+
     )
 
     document.add_paragraph(
+
         "The following are areas for technical investigation. "
         "They are not confirmed design-arounds or guarantees "
         "of avoiding patent claims."
+
     )
 
-    for alternative in (
-        recommendations.potential_design_alternatives
-    ):
+    if recommendations.potential_design_alternatives:
+
+        for alternative in (
+            recommendations.potential_design_alternatives
+        ):
+
+            document.add_paragraph(
+
+                alternative,
+
+                style="List Bullet"
+
+            )
+
+    else:
 
         document.add_paragraph(
-            alternative,
-            style="List Bullet"
+
+            "No potential design alternatives were identified."
+
         )
 
     # --------------------------------------------------------
-    # ADDITIONAL INVESTIGATION
+    # 9. ADDITIONAL INVESTIGATION AREAS
     # --------------------------------------------------------
 
     document.add_heading(
-        "8. Additional Investigation Areas",
+
+        "9. Additional Investigation Areas",
+
         level=1
+
     )
 
-    for investigation in (
-        recommendations.additional_investigation_areas
-    ):
+    if recommendations.additional_investigation_areas:
+
+        for investigation in (
+            recommendations.additional_investigation_areas
+        ):
+
+            document.add_paragraph(
+
+                investigation,
+
+                style="List Bullet"
+
+            )
+
+    else:
 
         document.add_paragraph(
-            investigation,
-            style="List Bullet"
+
+            "No additional investigation areas were identified."
+
         )
 
     # --------------------------------------------------------
-    # CONCLUSION
+    # 10. CONCLUSION
     # --------------------------------------------------------
 
     document.add_heading(
-        "9. Portfolio Conclusion",
+
+        "10. Conclusion",
+
         level=1
+
     )
 
     document.add_paragraph(
-        recommendations.portfolio_conclusion
+
+        recommendations.conclusion
+
     )
 
     # --------------------------------------------------------
-    # METHODOLOGY / LIMITATIONS
+    # 11. METHODOLOGY AND LIMITATIONS
     # --------------------------------------------------------
 
     document.add_heading(
-        "10. Methodology and Limitations",
+
+        "11. Methodology and Limitations",
+
         level=1
+
     )
 
     document.add_paragraph(
+
         "This report consolidates the individual patent "
         "relevance assessments produced by RelevanceIQ. "
         "Portfolio-level patent counts are based on unique "
@@ -2266,11 +2992,13 @@ def generate_recommendations_report(
         "priority and technical correspondence, not confirmed "
         "infringement. The analysis is limited to the supplied "
         "product description, patent records, claims and "
-        "portfolio coverage."
+        "portfolio coverage. This report does not establish "
+        "freedom to operate or constitute a legal opinion."
+
     )
 
     # --------------------------------------------------------
-    # SAVE TO MEMORY BUFFER
+    # SAVE DOCUMENT TO MEMORY BUFFER
     # --------------------------------------------------------
 
     output = BytesIO()
@@ -2280,8 +3008,13 @@ def generate_recommendations_report(
     output.seek(0)
 
     print(
-        "Portfolio recommendations report generated successfully."
+
+        "AI Generated Recommendations report "
+        "generated successfully."
+
     )
 
     return output
+
+
 
