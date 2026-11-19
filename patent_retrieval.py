@@ -19,18 +19,13 @@ try:
 except ImportError:
     OpenAI = None
 
-# st.set_page_config(
-#     page_title="RelevanceIQ | Patent Search",
-#     page_icon="🔎",
-#     layout="wide",
-# )
-
 PUBLICATION_COL = "Publication Number"
 TITLE_COL = "Title"
 ABSTRACT_COL = "Abstract"
 DESCRIPTION_COL = "Description"
 CLAIMS_COL = "All Claims"
 EMBEDDING_MODEL = "text-embedding-3-small"
+
 # Added for sending result to relevance iq
 INDEPENDENT_CLAIMS_COL = "Independent Claims"
 
@@ -60,7 +55,7 @@ COLUMN_ALIASES = {
        ,
     CLAIMS_COL: [
            
-            "Claims" , "All Claims" , "claims" , "All claims"
+            "Claims" , "claims" , "All Claims" ,  "All claims", "All_claims" ,  "All_Claims"
         ],
 }
 
@@ -235,9 +230,6 @@ def split_for_embeddings(text: str, max_chars: int = EMBEDDING_CHUNK_CHARS) -> l
     step = max_chars - overlap
     chunks = [text[start:start + max_chars] for start in range(0, len(text), step)]
     return [chunk for chunk in chunks if chunk.strip()]
-
-
-
 
 def get_document_embeddings(
     documents: tuple[str, ...] | list[str],

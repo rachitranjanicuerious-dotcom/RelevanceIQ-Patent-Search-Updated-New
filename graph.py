@@ -11,12 +11,12 @@ from node import(
 # Graph
 graph = StateGraph(RelevanceState)
 
-# Nodes
 # graph.add_node(
 #     "Extract Product Features",
 #      extract_product_features
 # )
 
+# Nodes
 graph.add_node(
     "Extract Patent Features",
      extract_patent_features
@@ -60,7 +60,7 @@ png = workflow.get_graph().draw_mermaid_png()
 with open("workflow_3_nodes.png", "wb") as f:
     f.write(png)
 
-print("Workflow image saved as workflow_3_nodes.png")
+print("Workflow image saved as workflow.png")
 
 
 

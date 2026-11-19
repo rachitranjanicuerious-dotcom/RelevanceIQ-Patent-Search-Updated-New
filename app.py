@@ -1,5 +1,5 @@
-
 import streamlit as st
+from matplotlib.ticker import MaxNLocator
 import sqlite3
 import uuid
 import os
@@ -8,16 +8,17 @@ import html
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from langchain_core.messages import HumanMessage
-
 from node import (
     llm,
-    feature_parser,
+    feature_parser, 
+)
+
+from ai_recommendations import(
     calculate_patent_analytics,
     generate_ai_recommendations,
-    generate_ai_recommendations_report
+    generate_ai_recommendations_report  
 )
 
 from graph import workflow
@@ -25,13 +26,11 @@ from database import create_table, save_result
 import templates as ui
 from patent_retrieval import render_patent_retrieval
 
-
 # ============================================================
 # PARALLEL PROCESSING CONFIGURATION
 # ============================================================
 
 MAX_WORKERS = 5
-
 
 # ============================================================
 # PAGE CONFIG
@@ -259,8 +258,8 @@ render_html("""
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 13px;
-    padding: 23px 26px;
-    margin: 16px 0 22px 0;
+    padding: 18px 24px;
+    margin: 8px 0 10px 0;
     box-shadow: 0 3px 12px rgba(15, 35, 60, 0.055);
     color: #26364a;
     width: 100%;
@@ -274,7 +273,7 @@ render_html("""
     font-weight: 700;
     color: #10243c;
     line-height: 1.55;
-    margin-bottom: 15px;
+    margin-bottom: 10px;
     overflow-wrap: anywhere;
 }
 
@@ -284,8 +283,8 @@ render_html("""
     color: #718096;
     text-transform: uppercase;
     letter-spacing: 0.8px;
-    margin-top: 17px;
-    margin-bottom: 7px;
+    margin-top: 11px;
+    margin-bottom: 5px;
 }
 
 .recommendation-body {
@@ -308,8 +307,8 @@ render_html("""
 
 .recommendation-publications {
     border-top: 1px solid #e8edf3;
-    margin-top: 18px;
-    padding-top: 13px;
+    margin-top: 12px;
+    padding-top: 9px;
     color: #718096;
     font-size: 12px;
     line-height: 1.7;
@@ -322,7 +321,7 @@ render_html("""
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.5px;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 }
 
 .priority-highest {
@@ -780,17 +779,17 @@ def display_portfolio_analytics(analytics):
             feature_df["H"] + feature_df["M+"]
         )
 
-    if "portfolio_concentration" not in feature_df.columns:
+    # if "portfolio_concentration" not in feature_df.columns:
 
-        total_patent_count = max(
-            float(total_patents),
-            1
-        )
+    #     total_patent_count = max(
+    #         float(total_patents),
+    #         1
+    #     )
 
-        feature_df["portfolio_concentration"] = (
-            feature_df["total_patents"]
-            / total_patent_count
-        ) * 100
+    #     feature_df["portfolio_concentration"] = (
+    #         feature_df["total_patents"]
+    #         / total_patent_count
+    #     ) * 100
 
     if "h_share" not in feature_df.columns:
 
@@ -815,7 +814,7 @@ def display_portfolio_analytics(analytics):
         "NR",
         "total_patents",
         "high_relevance_count",
-        "portfolio_concentration",
+        # "portfolio_concentration",
         "h_share"
     ]
 
@@ -831,7 +830,7 @@ def display_portfolio_analytics(analytics):
         "product_feature": "Product Feature",
         "total_patents": "Total Patents",
         "high_relevance_count": "H + M+",
-        "portfolio_concentration": "Portfolio Concentration (%)",
+        # "portfolio_concentration": "Portfolio Concentration (%)",
         "h_share": "H Share (%)"
     })
 
@@ -995,6 +994,17 @@ def display_portfolio_analytics(analytics):
         axis="x",
         labelsize=9
     )
+
+    # --------------------------------------------------------
+    # X-AXIS: WHOLE NUMBER INTERVALS
+    # --------------------------------------------------------
+
+    ax.xaxis.set_major_locator(
+        MaxNLocator(integer=True)
+    )
+
+    ax.set_xlim(left=0)
+
 
     # --------------------------------------------------------
     # FIX LEFT-SIDE LABEL CLIPPING
