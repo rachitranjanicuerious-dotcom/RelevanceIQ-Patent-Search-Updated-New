@@ -275,7 +275,7 @@ def input_info():
 
         <br><br>
         
-        <b>Note<b> : If Independent Claims are not present, keep this column blank    
+        <b>Note</b> : If Independent Claims are not present, keep this column blank    
 
     </div>
     """
