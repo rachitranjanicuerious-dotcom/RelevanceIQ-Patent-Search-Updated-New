@@ -266,12 +266,16 @@ def input_info():
     return """
     <div class="input-info">
 
-        Expected fields include
+        Expected fields include :
         <b>Publication Number</b>,
         <b>Title</b>,
         <b>Abstract</b>,
-        <b>Independent Claim</b> and
+        <b>Independent Claims</b> and
         <b>All Claims</b>.
+
+        <br><br>
+        
+        Note : If Independent Claims are not present, keep this column blank    
 
     </div>
     """

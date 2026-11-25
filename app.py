@@ -664,7 +664,7 @@ def display_portfolio_analytics(analytics):
         rating_counts = {}
 
     metric_items = [
-        ("Total Patents", total_patents),
+        (" ", total_patents),
         ("H", rating_counts.get("H", 0)),
         ("M+", rating_counts.get("M+", 0)),
         ("L", rating_counts.get("L", 0)),

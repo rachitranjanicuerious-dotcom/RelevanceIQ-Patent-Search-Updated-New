@@ -466,7 +466,7 @@ def render_patent_retrieval() -> None:
         )
 
         similarity_threshold = 0.02
-        semantic_threshold = 0.33
+        semantic_threshold = 0.43
 
         submitted = st.form_submit_button(
             "Search Patents",
