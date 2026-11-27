@@ -57,7 +57,6 @@ HUMAN-ANNOTATED RELEVANCE RATING:
         examples.append(example)
     return "\n".join(examples)
 
-
 #-----------------------------------------------------------
 # Project few shot examples
 #------------------------------------------------------------
@@ -79,8 +78,6 @@ def load_project_few_shot_examples(state : RelevanceState):
         title = row.get("Title" , row.get("title" , ""))
 
         example = f"""
-        Product Description:
-        {row.get("Product Description", "")}
 
         Publication Number:
         {row.get("Publication Number", "")}
