@@ -689,14 +689,14 @@ def final_analysis(state: RelevanceState):
      # Additional optional project-specific examples
     project_examples = load_project_few_shot_examples(state)
 
-    if project_examples:
+    # if project_examples:
             
-        few_shot_examples += "\n\nPROJECT-SPECIFIC HUMAN-RATED EXAMPLES:\n"
-        few_shot_examples += project_examples
+    #     few_shot_examples += "\n\nPROJECT-SPECIFIC HUMAN-RATED EXAMPLES:\n"
+    #     few_shot_examples += project_examples
 
     # The common FTO instructions + few-shot examples -- System Message
     common_fto_system_prompt = build_common_fto_system_prompt(
-        few_shot_examples 
+        few_shot_examples  + "\n]n"  + project_examples 
     )
 
     # ========================================================
