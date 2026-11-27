@@ -164,7 +164,7 @@ def load_project_few_shot_examples(uploaded_file):
     column_aliases = {
         "relevance human": "Relevance Rating",
         "relevance rating": "Relevance Rating",
-        "product description": "Product Description",
+        # "product description": "Product Description",
         "publication number": "Publication Number",
         "title": "Title",
         "abstract": "Abstract",
@@ -202,7 +202,7 @@ def load_project_few_shot_examples(uploaded_file):
     # --------------------------------------------------------
 
     required_columns = [
-        "Product Description",
+        # "Product Description",
         "Publication Number",
         "Title",
         "Abstract",
