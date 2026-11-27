@@ -1,4 +1,5 @@
 from typing import TypedDict
+from typing import Optional
 
 class RelevanceState(TypedDict) :
     # product description
@@ -11,18 +12,12 @@ class RelevanceState(TypedDict) :
     independent_claims : str
     all_claims    : str
 
-    # relevance_human : str
-
     # Extracted primary and secondary features
     primary_product_features : list[str]
     secondary_product_features : list[str]
 
     primary_patent_features : list[str]
     secondary_patent_features : list[str]
-
-    # Extracted features
-    # product_features : list[str]
-    # patent_features : list[str]
 
     # User-provided framework
     relevance_framework : str
@@ -44,5 +39,7 @@ class RelevanceState(TypedDict) :
 
     current_patent_index: int
     review_type: str
+
+    project_few_shot_examples: Optional[str]
 
 

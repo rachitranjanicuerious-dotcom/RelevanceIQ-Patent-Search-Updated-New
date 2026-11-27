@@ -9,7 +9,6 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.types import interrupt
 from langchain_core.output_parsers import PydanticOutputParser
@@ -57,6 +56,55 @@ HUMAN-ANNOTATED RELEVANCE RATING:
 """
         examples.append(example)
     return "\n".join(examples)
+
+
+#-----------------------------------------------------------
+# Project few shot examples
+#------------------------------------------------------------
+
+def load_project_few_shot_examples(state : RelevanceState):
+
+    uploaded_examples = state.get("project_few_shot_examples")
+
+    if not uploaded_examples:
+        return ""
+
+    records = json.loads(uploaded_examples) 
+    df = pd.DataFrame(records)
+
+    examples = []
+
+    for _, row in df.iterrows():
+
+        title = row.get("Title" , row.get("title" , ""))
+
+        example = f"""
+        Product Description:
+        {row.get("Product Description", "")}
+
+        Publication Number:
+        {row.get("Publication Number", "")}
+
+        Title:
+        {title}
+
+        Abstract:
+        {row.get("Abstract", "")}
+
+        Independent Claims:
+        {row.get("Independent Claims", "")}
+
+        All Claims:
+        {row.get("All Claims", "")}
+
+        Human Relevance Rating:
+        {row.get("Relevance Rating", "")}
+        """
+
+        examples.append(example)
+
+    return "\n".join(examples)
+
 
 def build_common_fto_system_prompt(few_shot_examples):
     """
@@ -222,10 +270,14 @@ FEW-SHOT CALIBRATION EXAMPLES
 The following are human-annotated examples.
 
 Use these examples to calibrate the H / M+ / L decision boundary.
-Do not copy their conclusions blindly. Compare the technical
+Do not copy their conclusions blindly. 
+
+Compare the technical
 relationship in each example with the current product and patent.
 
 {few_shot_examples}
+
+{project_examples}
 
 ============================================================
 CLAIM-CENTRIC FTO ANALYSIS
@@ -633,11 +685,20 @@ For M+ or L, the reasoning must clearly answer:
 def final_analysis(state: RelevanceState):
 
     few_shot_examples = load_few_shot_examples()
-    # The common FTO instructions + few-shot examples -- System Message
 
+     # Additional optional project-specific examples
+    project_examples = load_project_few_shot_examples(state)
+
+    if project_examples:
+            
+        few_shot_examples += "\n\nPROJECT-SPECIFIC HUMAN-RATED EXAMPLES:\n"
+        few_shot_examples += project_examples
+
+    # The common FTO instructions + few-shot examples -- System Message
     common_fto_system_prompt = build_common_fto_system_prompt(
-        few_shot_examples
+        few_shot_examples 
     )
+
     # ========================================================
     # FRAMEWORK-ONLY FTO ANALYSIS
     # =======================================================
